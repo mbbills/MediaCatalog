@@ -1,0 +1,39 @@
+name: tests
+
+on:
+  push:
+    branches: ["main", "feature/**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+      - name: Prepare local settings
+        run: cp settings.example.ini settings.ini
+      - name: Compile Python sources
+        run: python -m compileall -q scripts tests
+      - name: Run self-contained tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          tests=(
+            tests/test_barcodelookup_lookup.py
+            tests/test_bluray_details.py
+            tests/test_bluray_lookup.py
+            tests/test_desktop_detail_contract.py
+            tests/test_imdb_ratings.py
+            tests/test_integrated_desktop_contract.py
+            tests/test_integrated_resolver.py
+            tests/test_install_media_catalog.py
+            tests/test_job_progress.py
+            tests/test_templates.py
+            tests/test_upcitemdb_lookup.py
+          )
+          for test_file in "${tests[@]}"; do
+            python "$test_file"
+          done
