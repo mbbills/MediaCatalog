@@ -94,12 +94,25 @@ class ReleaseDetailParser(HTMLParser):
         self.single_disc_heading = False
         self.page_title_parts = []
         self.page_title_depth = 0
+        self.imdb_ids = []
 
     def handle_starttag(self, tag, attrs):
         values = dict(attrs)
 
         if tag == "title":
             self.page_title_depth = 1
+
+        if tag == "a" and values.get("id") == "imdb_icon":
+            href = html.unescape(values.get("href") or "")
+            match = re.search(
+                r"https?://(?:www\.)?imdb\.com/title/(tt\d+)(?:/|[?#]|$)",
+                href,
+                flags=re.I,
+            )
+            if match:
+                imdb_id = match.group(1).lower()
+                if imdb_id not in self.imdb_ids:
+                    self.imdb_ids.append(imdb_id)
 
         if tag == "span":
             classes = set((values.get("class") or "").split())
@@ -304,6 +317,45 @@ def parse_release_title(document):
     return title
 
 
+def parse_release_imdb_identity(document):
+    """Return only Blu-ray.com's structured IMDb title identity.
+
+    Review prose and unrelated external links are intentionally ignored.  The
+    page's rating-area anchor uses id="imdb_icon" for its canonical title link.
+    """
+    parser = ReleaseDetailParser()
+    parser.feed(document)
+
+    if len(parser.imdb_ids) == 1:
+        imdb_id = parser.imdb_ids[0]
+        return {
+            "imdb_id": imdb_id,
+            "imdb_url": "https://www.imdb.com/title/{}/".format(imdb_id),
+            "imdb_warning": "",
+        }
+
+    if len(parser.imdb_ids) > 1:
+        return {
+            "imdb_id": "",
+            "imdb_url": "",
+            "imdb_warning": "Multiple structured IMDb links were found",
+        }
+
+    return {
+        "imdb_id": "",
+        "imdb_url": "",
+        "imdb_warning": "",
+    }
+
+
+def parse_release_page(document):
+    """Parse all supported fields from one already-downloaded release page."""
+    page = parse_release_details(document)
+    page["release_title"] = parse_release_title(document)
+    page.update(parse_release_imdb_identity(document))
+    return page
+
+
 def normalize_release_url(value):
     """Accept only individual Blu-ray.com DVD or movie release pages."""
     parsed = urllib.parse.urlsplit((value or "").strip())
@@ -325,6 +377,19 @@ def fetch_release_details(client, release_url):
 
     details["url"] = release_url
     return details
+
+
+def fetch_release_page(client, release_url):
+    """Fetch one page once and return title, details, and structured IMDb link."""
+    release_url = normalize_release_url(release_url)
+    body = client.request(release_url, HOME)
+    page = parse_release_page(body.decode("utf-8", "replace"))
+
+    if not page.get("release_title") and not any(page.values()):
+        raise ValueError("Release data was not found on the page")
+
+    page["url"] = release_url
+    return page
 
 
 def fetch_release_title(client, release_url):

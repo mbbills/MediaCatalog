@@ -1,7 +1,7 @@
 Attribute VB_Name = "MediaCatalogExcel"
 Option Explicit
 
-' MediaCatalog Excel 2016 module v0.3.0
+' MediaCatalog Excel 2016 module v0.4.0
 '
 ' Standard columns:
 '   A  UPC
@@ -55,6 +55,7 @@ Public Sub InstallMediaCatalogMenu()
     menuControl.Caption = MENU_CAPTION
     menuControl.Tag = MENU_TAG
 
+    AddMenuButton menuControl, "Resolve Selected Rows", "ResolveSelectedRows"
     AddMenuButton menuControl, "Resolve Selected UPCs with BRdC", "ResolveSelectedUPCsWithBRdC"
     AddMenuButton menuControl, "Resolve Selected UPCs with UPCdb", "ResolveSelectedUPCsWithUPCdb"
     AddMenuButton menuControl, "Resolve Selected UPCs with BarcodeLookup.com", "ResolveSelectedUPCsWithBarcodedCom"
@@ -524,6 +525,281 @@ Private Function IsUPCERow(ByVal sheet As Worksheet, ByVal rowNumber As Long, By
     If typeColumn <= 0 Then Exit Function
     IsUPCERow = (NormalizeHeader(CStr(sheet.Cells(rowNumber, typeColumn).Value2)) = "upce")
 End Function
+
+
+' ============================================================================
+' Integrated selected-row resolver
+' ============================================================================
+
+Private Function TsvField(ByVal value As String) As String
+    value = Replace(value, vbTab, " ")
+    value = Replace(value, vbCr, " ")
+    value = Replace(value, vbLf, " ")
+    TsvField = Trim$(value)
+End Function
+
+
+Private Function CellTextOrHyperlink(ByVal targetCell As Range) As String
+    CellTextOrHyperlink = Trim$(CStr(targetCell.Value2))
+    If Len(CellTextOrHyperlink) = 0 Then
+        CellTextOrHyperlink = GetCellHyperlinkAddress(targetCell)
+    End If
+End Function
+
+
+Public Sub ResolveSelectedRows()
+    Dim sheet As Worksheet
+    Dim rows As Variant
+    Dim rowValue As Variant
+    Dim errorText As String
+    Dim rootPath As String
+    Dim pythonCommand As String
+    Dim scriptPath As String
+    Dim inputPath As String
+    Dim outputPath As String
+    Dim inputText As String
+    Dim commandLine As String
+    Dim standardOutput As String
+    Dim standardError As String
+    Dim exitCode As Long
+    Dim upcColumn As Long
+    Dim blurayUrlColumn As Long
+    Dim releaseTitleColumn As Long
+    Dim imdbUrlColumn As Long
+    Dim imdbIdColumn As Long
+    Dim titleColumn As Long
+    Dim yearColumn As Long
+    Dim runtimeColumn As Long
+    Dim titleTypeColumn As Long
+    Dim seasonColumn As Long
+    Dim statusColumn As Long
+    Dim studioColumn As Long
+    Dim blurayYearColumn As Long
+    Dim blurayRuntimeColumn As Long
+    Dim ratingColumn As Long
+    Dim releaseDateColumn As Long
+    Dim discFormatColumn As Long
+    Dim codecColumn As Long
+    Dim resolutionColumn As Long
+    Dim aspectColumn As Long
+    Dim discCountColumn As Long
+    Dim typeColumn As Long
+    Dim code As String
+    Dim blurayUrl As String
+    Dim imdbUrl As String
+    Dim releaseTitle As String
+    Dim imdbId As String
+    Dim canonicalTitle As String
+    Dim season As String
+    Dim requestedCount As Long
+    Dim skippedBlank As Long
+    Dim skippedUPCE As Long
+    Dim lines As Variant
+    Dim fields As Variant
+    Dim lineIndex As Long
+    Dim resultRow As Long
+    Dim statusText As String
+    Dim resolved As Long
+    Dim partial As Long
+    Dim review As Long
+    Dim cancelled As Long
+    Dim skipped As Long
+    Dim failed As Long
+
+    On Error GoTo FatalError
+
+    Set sheet = ActiveCatalogSheet(errorText)
+    If sheet Is Nothing Then GoTo ShowError
+
+    rows = SelectedRows(errorText)
+    If Len(errorText) > 0 Then GoTo ShowError
+
+    upcColumn = FindHeaderColumn(sheet, Array("UPC", "UPC Code", "Barcode"))
+    blurayUrlColumn = FindHeaderColumn(sheet, Array("Blu-ray.com URL", "Blu-ray URL", "Release URL"))
+    releaseTitleColumn = FindHeaderColumn(sheet, Array("Release Title", "Blu-ray.com Title", "DVD Title"))
+    imdbUrlColumn = FindHeaderColumn(sheet, Array("IMDb URL"))
+    imdbIdColumn = FindHeaderColumn(sheet, Array("IMDb ID"))
+    titleColumn = FindHeaderColumn(sheet, Array("Title", "IMDb Title"))
+    yearColumn = FindHeaderColumn(sheet, Array("Year", "IMDb Year"))
+    runtimeColumn = FindHeaderColumn(sheet, Array("Runtime", "IMDb Runtime"))
+    titleTypeColumn = FindHeaderColumn(sheet, Array("Title Type", "IMDb Title Type"))
+    seasonColumn = FindHeaderColumn(sheet, Array("Season", "IMDb Season"))
+    statusColumn = FindHeaderColumn(sheet, Array("Status / Error", "Status", "Error"))
+    studioColumn = FindHeaderColumn(sheet, Array("Studio"))
+    blurayYearColumn = FindHeaderColumn(sheet, Array("Blu-ray Year"))
+    blurayRuntimeColumn = FindHeaderColumn(sheet, Array("Blu-ray Runtime"))
+    ratingColumn = FindHeaderColumn(sheet, Array("Content Rating", "Rating"))
+    releaseDateColumn = FindHeaderColumn(sheet, Array("Physical Release Date", "Release Date"))
+    discFormatColumn = FindHeaderColumn(sheet, Array("Disc Format", "Disk Format"))
+    codecColumn = FindHeaderColumn(sheet, Array("Video Codec", "Codec"))
+    resolutionColumn = FindHeaderColumn(sheet, Array("Resolution"))
+    aspectColumn = FindHeaderColumn(sheet, Array("Aspect Ratio"))
+    discCountColumn = FindHeaderColumn(sheet, Array("Disc Count / Capacities", "Disc Count", "Disk Count"))
+    typeColumn = FindHeaderColumn(sheet, Array("format", "Barcode Type", "Symbology", "Type"))
+
+    If upcColumn = 0 Or blurayUrlColumn = 0 Or releaseTitleColumn = 0 Or _
+       imdbUrlColumn = 0 Or imdbIdColumn = 0 Or titleColumn = 0 Or _
+       yearColumn = 0 Or runtimeColumn = 0 Or titleTypeColumn = 0 Or _
+       seasonColumn = 0 Or statusColumn = 0 Or studioColumn = 0 Or _
+       blurayYearColumn = 0 Or blurayRuntimeColumn = 0 Or ratingColumn = 0 Or _
+       releaseDateColumn = 0 Or discFormatColumn = 0 Or codecColumn = 0 Or _
+       resolutionColumn = 0 Or aspectColumn = 0 Or discCountColumn = 0 Then
+        errorText = "The integrated resolver requires the standard MediaCatalog columns A through U."
+        GoTo ShowError
+    End If
+
+    pythonCommand = GetPythonCommand(errorText)
+    If Len(errorText) > 0 Then GoTo ShowError
+    pythonCommand = GetWindowlessPythonCommand(pythonCommand, errorText)
+    If Len(errorText) > 0 Then GoTo ShowError
+
+    rootPath = ProjectPath()
+    scriptPath = JoinPath(JoinPath(rootPath, "scripts"), "resolve_rows.py")
+    If Not FileExists(scriptPath) Then
+        errorText = "Integrated resolver was not found:" & vbCrLf & scriptPath
+        GoTo ShowError
+    End If
+
+    inputText = "row" & vbTab & "upc" & vbTab & "bluray_url" & vbTab & _
+                "release_title" & vbTab & "imdb_url" & vbTab & "imdb_id" & vbTab & _
+                "title" & vbTab & "season" & vbCrLf
+
+    For Each rowValue In rows
+        If IsUPCERow(sheet, CLng(rowValue), typeColumn) Then
+            skippedUPCE = skippedUPCE + 1
+            sheet.Cells(CLng(rowValue), statusColumn).Value = "UPC_E skipped"
+        Else
+            code = NormalizeBarcode(sheet.Cells(CLng(rowValue), upcColumn))
+            blurayUrl = CellTextOrHyperlink(sheet.Cells(CLng(rowValue), blurayUrlColumn))
+            releaseTitle = Trim$(CStr(sheet.Cells(CLng(rowValue), releaseTitleColumn).Value2))
+            imdbUrl = CellTextOrHyperlink(sheet.Cells(CLng(rowValue), imdbUrlColumn))
+            imdbId = Trim$(CStr(sheet.Cells(CLng(rowValue), imdbIdColumn).Value2))
+            canonicalTitle = Trim$(CStr(sheet.Cells(CLng(rowValue), titleColumn).Value2))
+            season = Trim$(CStr(sheet.Cells(CLng(rowValue), seasonColumn).Value2))
+
+            If Len(code & blurayUrl & releaseTitle & imdbUrl & imdbId & canonicalTitle) = 0 Then
+                skippedBlank = skippedBlank + 1
+            Else
+                inputText = inputText & CStr(rowValue) & vbTab & _
+                            TsvField(code) & vbTab & TsvField(blurayUrl) & vbTab & _
+                            TsvField(releaseTitle) & vbTab & TsvField(imdbUrl) & vbTab & _
+                            TsvField(imdbId) & vbTab & TsvField(canonicalTitle) & vbTab & _
+                            TsvField(season) & vbCrLf
+                requestedCount = requestedCount + 1
+            End If
+        End If
+    Next rowValue
+
+    If requestedCount = 0 Then
+        MsgBox "No selected rows contained resolver input." & vbCrLf & vbCrLf & _
+               "Blank: " & CStr(skippedBlank) & vbCrLf & _
+               "UPC_E skipped: " & CStr(skippedUPCE), vbInformation, "MediaCatalog"
+        Exit Sub
+    End If
+
+    inputPath = TemporaryPath("_integrated_input.tsv")
+    outputPath = TemporaryPath("_integrated_output.tsv")
+    WriteUtf8Text inputPath, inputText
+
+    commandLine = QuoteArgument(pythonCommand) & " -E " & _
+                  QuoteArgument(scriptPath) & " " & _
+                  QuoteArgument(inputPath) & " " & QuoteArgument(outputPath)
+
+    exitCode = RunCommandAndWait(commandLine, 43200, standardOutput, standardError)
+    If exitCode <> 0 Or Not FileExists(outputPath) Then
+        errorText = "Integrated resolver failed."
+        If Len(Trim$(standardError)) > 0 Then
+            errorText = errorText & vbCrLf & vbCrLf & Trim$(standardError)
+        End If
+        GoTo CleanupAndShowError
+    End If
+
+    lines = Split(Replace(ReadUtf8Text(outputPath), vbCrLf, vbLf), vbLf)
+    For lineIndex = 1 To UBound(lines)
+        If Len(Trim$(CStr(lines(lineIndex)))) > 0 Then
+            fields = Split(CStr(lines(lineIndex)), vbTab)
+            If UBound(fields) >= 24 Then
+                resultRow = CLng(fields(0))
+
+                If Len(fields(4)) > 0 Then
+                    SetCellHyperlink sheet.Cells(resultRow, blurayUrlColumn), fields(4), fields(4)
+                End If
+                If Len(fields(5)) > 0 Then
+                    SetCellHyperlink sheet.Cells(resultRow, releaseTitleColumn), fields(4), fields(5)
+                End If
+
+                If Len(fields(7)) > 0 Then
+                    SetCellHyperlink sheet.Cells(resultRow, imdbUrlColumn), fields(6), fields(6)
+                    sheet.Cells(resultRow, imdbIdColumn).Value = fields(7)
+                End If
+                If Len(fields(8)) > 0 Then
+                    sheet.Cells(resultRow, titleColumn).Value = fields(8)
+                    sheet.Cells(resultRow, yearColumn).Value = fields(9)
+                    sheet.Cells(resultRow, runtimeColumn).Value = fields(10)
+                    sheet.Cells(resultRow, titleTypeColumn).Value = fields(11)
+                    sheet.Cells(resultRow, seasonColumn).Value = fields(12)
+                End If
+
+                WriteTextIfBlank sheet.Cells(resultRow, studioColumn), fields(13)
+                WriteNumberIfBlank sheet.Cells(resultRow, blurayYearColumn), fields(14)
+                WriteNumberIfBlank sheet.Cells(resultRow, blurayRuntimeColumn), fields(15)
+                WriteTextIfBlank sheet.Cells(resultRow, ratingColumn), fields(16)
+                WriteIsoDateIfBlank sheet.Cells(resultRow, releaseDateColumn), fields(17)
+                WriteTextIfBlank sheet.Cells(resultRow, discFormatColumn), fields(18)
+                WriteTextIfBlank sheet.Cells(resultRow, codecColumn), fields(19)
+                WriteTextIfBlank sheet.Cells(resultRow, resolutionColumn), fields(20)
+                WriteTextIfBlank sheet.Cells(resultRow, aspectColumn), fields(21)
+                WriteTextIfBlank sheet.Cells(resultRow, discCountColumn), fields(22)
+
+                statusText = fields(1)
+                If Len(fields(2)) > 0 Then statusText = statusText & ": " & fields(2)
+                sheet.Cells(resultRow, statusColumn).Value = statusText
+
+                If Left$(fields(1), 3) = "OK " Or fields(1) = "OK" Then
+                    resolved = resolved + 1
+                ElseIf Left$(fields(1), 7) = "PARTIAL" Then
+                    partial = partial + 1
+                ElseIf Left$(fields(1), 12) = "NEEDS REVIEW" Then
+                    review = review + 1
+                ElseIf fields(1) = "CANCELLED" Then
+                    cancelled = cancelled + 1
+                ElseIf Left$(fields(1), 7) = "SKIPPED" Then
+                    skipped = skipped + 1
+                Else
+                    failed = failed + 1
+                End If
+            Else
+                failed = failed + 1
+            End If
+        End If
+    Next lineIndex
+
+    DeleteTemporaryFile inputPath
+    DeleteTemporaryFile outputPath
+
+    MsgBox "Integrated resolution finished." & vbCrLf & vbCrLf & _
+           "Complete: " & CStr(resolved) & vbCrLf & _
+           "Partial: " & CStr(partial) & vbCrLf & _
+           "Needs review: " & CStr(review) & vbCrLf & _
+           "Cancelled: " & CStr(cancelled) & vbCrLf & _
+           "Skipped: " & CStr(skipped + skippedBlank + skippedUPCE) & vbCrLf & _
+           "Errors: " & CStr(failed), _
+           IIf(review + cancelled + failed > 0, vbExclamation, vbInformation), _
+           "MediaCatalog"
+    Exit Sub
+
+CleanupAndShowError:
+    DeleteTemporaryFile inputPath
+    DeleteTemporaryFile outputPath
+
+ShowError:
+    MsgBox errorText, vbExclamation, "MediaCatalog"
+    Exit Sub
+
+FatalError:
+    errorText = Err.Description
+    Resume CleanupAndShowError
+End Sub
 
 
 ' ============================================================================
@@ -1315,6 +1591,7 @@ Public Sub CheckMediaCatalogConfiguration()
     Dim barcodelookupScript As String
     Dim blurayDetailsScript As String
     Dim imdbScript As String
+    Dim integratedScript As String
     Dim databaseSetting As String
     Dim databasePath As String
     Dim barcodeApiKey As String
@@ -1342,6 +1619,7 @@ Public Sub CheckMediaCatalogConfiguration()
     barcodelookupScript = JoinPath(JoinPath(rootPath, "scripts"), "barcodelookup_lookup.py")
     blurayDetailsScript = JoinPath(JoinPath(rootPath, "scripts"), "bluray_details.py")
     imdbScript = JoinPath(JoinPath(rootPath, "scripts"), "imdb_lookup_calc.py")
+    integratedScript = JoinPath(JoinPath(rootPath, "scripts"), "resolve_rows.py")
     databaseSetting = ReadIniValue(settingsPath, "paths", "imdb_database", "data/imdb.sqlite")
     barcodeApiKey = ReadIniValue(settingsPath, "barcodelookup", "api_key", "")
     barcodePaidSubscription = _
@@ -1366,8 +1644,9 @@ Public Sub CheckMediaCatalogConfiguration()
              "Barcode Lookup paid subscription: " & IIf(barcodePaidSubscription, "CONFIRMED", "NOT CONFIRMED") & vbCrLf & _
              "Blu-ray details helper: " & IIf(FileExists(blurayDetailsScript), "OK", "MISSING") & vbCrLf & _
              "IMDb helper: " & IIf(FileExists(imdbScript), "OK", "MISSING") & vbCrLf & _
+             "Integrated resolver: " & IIf(FileExists(integratedScript), "OK", "MISSING") & vbCrLf & _
              "IMDb database: " & IIf(FileExists(databasePath), "OK", "MISSING") & vbCrLf & _
              databasePath
 
-    MsgBox report, IIf(FileExists(blurayScript) And FileExists(upcitemdbScript) And FileExists(barcodelookupScript) And Len(Trim$(barcodeApiKey)) > 0 And barcodePaidSubscription And FileExists(blurayDetailsScript) And FileExists(imdbScript) And FileExists(databasePath), vbInformation, vbExclamation), "MediaCatalog"
+    MsgBox report, IIf(FileExists(blurayScript) And FileExists(upcitemdbScript) And FileExists(barcodelookupScript) And Len(Trim$(barcodeApiKey)) > 0 And barcodePaidSubscription And FileExists(blurayDetailsScript) And FileExists(imdbScript) And FileExists(integratedScript) And FileExists(databasePath), vbInformation, vbExclamation), "MediaCatalog"
 End Sub

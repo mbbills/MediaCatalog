@@ -12,7 +12,7 @@ calc = (ROOT / "calc" / "MediaCatalog_Calc_Module.txt").read_text(
     encoding="utf-8-sig"
 )
 
-assert calc.splitlines()[2] == "' MediaCatalog LibreOffice Calc module v0.3.0"
+assert calc.splitlines()[2] == "' MediaCatalog LibreOffice Calc module v0.4.0"
 
 headers = (
     "UPC\tBlu-ray.com URL\tRelease Title\tIMDb URL\tIMDb ID\tTitle\t"
@@ -79,7 +79,7 @@ assert (ROOT / "scripts" / "bluray_details.py").is_file()
 assert (ROOT / "scripts" / "upcitemdb_lookup.py").is_file()
 assert (ROOT / "scripts" / "barcodelookup_lookup.py").is_file()
 assert (ROOT / "scripts" / "job_progress.py").is_file()
-assert "# MediaCatalog portable v0.3.0" in (ROOT / "README.md").read_text(
+assert "# MediaCatalog portable v0.4.0" in (ROOT / "README.md").read_text(
     encoding="utf-8"
 )
 

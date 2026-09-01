@@ -1,5 +1,40 @@
 # Changelog
 
+## v0.4.0
+
+- Added **Resolve Selected Rows**, a single Excel/Calc workflow that can begin
+  with a UPC/EAN, exact Blu-ray.com URL, IMDb URL/ID, release title, or
+  canonical title and populate every confidently resolvable field.
+- Added structured IMDb-link extraction from individual Blu-ray.com release
+  pages. Only the page's `imdb_icon` title link is accepted; IMDb links in
+  reviews and unrelated prose are ignored.
+- Established identifier precedence: entered IMDb ID, entered IMDb URL,
+  Blu-ray.com's structured IMDb link, then local title/year matching.
+- Preserved entered IMDb IDs when they conflict with Blu-ray.com and recorded
+  an explicit manual-override warning containing Blu-ray.com's linked ID.
+- Made a supplied Blu-ray.com release URL authoritative for physical-release
+  data, while existing physical-detail cells remain protected from overwrite.
+- Reused one downloaded Blu-ray.com release page for its title, disc details,
+  and IMDb identity instead of issuing separate enrichment requests.
+- Added offline integrated-resolver regression tests for UPC-first, URL-first,
+  IMDb-ID override, title-only, and invalid-manual-ID paths.
+- Added `install.cmd`, which finds Python 3.8+, installs Python 3.8.10 when
+  necessary on Windows, downloads and validates the three required IMDb daily
+  datasets, builds `imdb.sqlite`, and offers to create the Excel template.
+- Added a comment-preserving Python installation helper and safe dataset/database
+  refresh behavior.
+- Added an Excel 2016 template builder. Excel itself imports the reviewed BAS
+  source and ThisWorkbook events into a root-level macro-enabled XLSM; the
+  builder temporarily enables VBA-project access and restores its prior value.
+- Added `MediaCatalog_template.ods` with the standard A-through-U layout,
+  embedded v0.4.0 Basic module, and document-specific **Media Catalog** menu.
+- Added Calc parity commands for UPC-E removal, opening the selected UPC on
+  Blu-ray.com, and checking configuration.
+- Added GitHub Actions coverage on Python 3.8 plus package-contract tests for
+  the ODS macro/menu and Excel template-building inputs.
+- The workbook columns and IMDb SQLite schema remain unchanged; an existing
+  v0.2.4-or-newer database does not require rebuilding.
+
 ## v0.3.0
 
 - Added a shared native progress window for BRdC, UPCItemDB, Barcode Lookup,

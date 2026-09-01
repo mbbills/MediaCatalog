@@ -6,13 +6,19 @@ venv/
 # Local configuration can contain API credentials and machine-specific paths.
 settings.ini
 
+# Installer-generated Excel workbook.
+MediaCatalog_template.xlsm
+
 # Downloaded/generated IMDb data is large and is not redistributed.
 data/imdb.sqlite
+data/*.building
 data/source/*.tsv
 data/source/*.tsv.gz
+data/source/*.part
 !data/source/PUT_IMDB_DATASETS_HERE.txt
 
 # Runtime output.
 logs/*
 !logs/README.txt
 ~$*.xlsx
+~$*.xlsm
