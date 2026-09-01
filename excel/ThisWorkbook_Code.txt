@@ -1,0 +1,9 @@
+Option Explicit
+
+Private Sub Workbook_Open()
+    InstallMediaCatalogMenu
+End Sub
+
+Private Sub Workbook_BeforeClose(Cancel As Boolean)
+    RemoveMediaCatalogMenu
+End Sub

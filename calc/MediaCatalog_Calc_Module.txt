@@ -1,0 +1,1820 @@
+Option Explicit
+
+' MediaCatalog LibreOffice Calc module v0.3.0
+'
+' Columns:
+'   A  UPC
+'   B  Blu-ray.com URL
+'   C  Release Title
+'   D  IMDb URL
+'   E  IMDb ID
+'   F  Title
+'   G  Year
+'   H  Runtime
+'   I  Title Type
+'   J  Season
+'   K  Status / Error
+'   L  Studio
+'   M  Blu-ray Year
+'   N  Blu-ray Runtime
+'   O  Content Rating
+'   P  Physical Release Date
+'   Q  Disc Format
+'   R  Video Codec
+'   S  Resolution
+'   T  Aspect Ratio
+'   U  Disc Count / Capacities
+'
+' Correction rule:
+'   IMDb ID is the single authoritative user-correction field.
+'   To correct a bad match, replace the IMDb ID and run Lookup IMDb again.
+'   The other IMDb-derived fields are then refreshed from that exact ID.
+
+
+' ============================================================================
+' Configuration helpers
+' ============================================================================
+
+Function ReadIniValue( _
+    iniPath As String, _
+    sectionName As String, _
+    keyName As String, _
+    defaultValue As String _
+) As String
+
+    Dim FSO As Object
+    Dim txt As Object
+    Dim line As String
+    Dim currentSection As String
+    Dim p As Long
+    Dim thisKey As String
+
+    GlobalScope.BasicLibraries.LoadLibrary("ScriptForge")
+
+    Set FSO = CreateScriptService("FileSystem")
+    FSO.FileNaming = "SYS"
+
+    ReadIniValue = defaultValue
+
+    If Not FSO.FileExists(iniPath) Then Exit Function
+
+    Set txt = FSO.OpenTextFile( _
+        iniPath, _
+        FSO.ForReading, _
+        False, _
+        "UTF-8" _
+    )
+
+    If IsNull(txt) Then Exit Function
+
+    currentSection = ""
+
+    Do While Not txt.AtEndOfStream
+
+        line = Trim(txt.ReadLine())
+
+        If line <> "" Then
+
+            If Left(line, 1) <> "#" And _
+               Left(line, 1) <> ";" Then
+
+                If Left(line, 1) = "[" And _
+                   Right(line, 1) = "]" Then
+
+                    currentSection = LCase( _
+                        Trim(Mid(line, 2, Len(line) - 2)) _
+                    )
+
+                ElseIf currentSection = LCase(sectionName) Then
+
+                    p = InStr(line, "=")
+
+                    If p > 0 Then
+
+                        thisKey = LCase( _
+                            Trim(Left(line, p - 1)) _
+                        )
+
+                        If thisKey = LCase(keyName) Then
+                            ReadIniValue = Trim(Mid(line, p + 1))
+                            txt.CloseFile()
+                            Exit Function
+                        End If
+
+                    End If
+
+                End If
+
+            End If
+
+        End If
+
+    Loop
+
+    txt.CloseFile()
+
+End Function
+
+
+Function GetProjectPath() As String
+
+    Dim FSO As Object
+    Dim docPath As String
+
+    GlobalScope.BasicLibraries.LoadLibrary("ScriptForge")
+
+    Set FSO = CreateScriptService("FileSystem")
+    FSO.FileNaming = "SYS"
+
+    docPath = ConvertFromURL(ThisComponent.URL)
+
+    If docPath = "" Then
+        GetProjectPath = ""
+        Exit Function
+    End If
+
+    GetProjectPath = FSO.GetParentFolderName(docPath)
+
+End Function
+
+
+Function GetSettingsPath() As String
+
+    Dim FSO As Object
+    Dim projectPath As String
+
+    GlobalScope.BasicLibraries.LoadLibrary("ScriptForge")
+
+    Set FSO = CreateScriptService("FileSystem")
+    FSO.FileNaming = "SYS"
+
+    projectPath = GetProjectPath()
+
+    If projectPath = "" Then
+        GetSettingsPath = ""
+        Exit Function
+    End If
+
+    GetSettingsPath = FSO.BuildPath(projectPath, "settings.ini")
+
+End Function
+
+
+' ============================================================================
+' UPC/EAN -> release title
+' ============================================================================
+
+Function NormalizeCalcBarcode(oCell As Object) As String
+
+    Dim rawValue As String
+    Dim character As String
+    Dim digits As String
+    Dim i As Long
+
+    rawValue = Trim(oCell.String)
+
+    If InStr(UCase(rawValue), "E") > 0 And oCell.Value <> 0 Then
+        rawValue = Format(oCell.Value, "0")
+    End If
+
+    For i = 1 To Len(rawValue)
+        character = Mid(rawValue, i, 1)
+        If character >= "0" And character <= "9" Then
+            digits = digits & character
+        End If
+    Next i
+
+    If Len(digits) = 11 Then digits = "0" & digits
+    NormalizeCalcBarcode = digits
+
+End Function
+
+
+Sub SetCalcCellHyperlink( _
+    oCell As Object, _
+    address As String, _
+    displayText As String _
+)
+
+    Dim oText As Object
+    Dim oField As Object
+
+    oCell.String = ""
+
+    If Trim(address) = "" Then
+        oCell.String = displayText
+        Exit Sub
+    End If
+
+    Set oText = oCell.Text
+    Set oField = ThisComponent.createInstance( _
+        "com.sun.star.text.textfield.URL" _
+    )
+    oField.URL = address
+    oField.Representation = displayText
+    oText.insertTextContent(oText.End, oField, False)
+
+End Sub
+
+
+Sub ResolveSelectedUPCs()
+    ResolveSelectedUPCsWithBRdC
+End Sub
+
+
+Sub ResolveSelectedUPCsWithBRdC()
+    ResolveSelectedUPCsByProvider _
+        "Blu-ray.com", "BRdC", "bluray_lookup_excel.py", True, True
+End Sub
+
+
+Sub ResolveSelectedUPCsWithUPCdb()
+    ResolveSelectedUPCsByProvider _
+        "UPCItemDB", "UPCdb", "upcitemdb_lookup.py", False, True
+End Sub
+
+
+Sub ResolveSelectedUPCsWithBarcodedCom()
+    ResolveSelectedUPCsByProvider _
+        "BarcodeLookup.com", "BarcodeLookup", _
+        "barcodelookup_lookup.py", False, True
+End Sub
+
+
+Sub ResolveSelectedUPCsWithBarcodedComNoAPI()
+
+    Dim oSelection As Object
+    Dim oSheet As Object
+    Dim oCell As Object
+    Dim dispatcher As Object
+    Dim shellExecute As Object
+    Dim startRow As Long
+    Dim endRow As Long
+    Dim upcColumn As Long
+    Dim upc As String
+
+    On Error GoTo ManualLookupError
+
+    Set oSelection = ThisComponent.CurrentSelection
+    Set oSheet = ThisComponent.CurrentController.ActiveSheet
+
+    If oSelection.supportsService( _
+        "com.sun.star.sheet.SheetCell" _
+    ) Then
+        startRow = oSelection.CellAddress.Row
+        endRow = startRow
+    ElseIf oSelection.supportsService( _
+        "com.sun.star.sheet.SheetCellRange" _
+    ) Then
+        startRow = oSelection.RangeAddress.StartRow
+        endRow = oSelection.RangeAddress.EndRow
+    Else
+        MsgBox _
+            "Select exactly one data row for a manual Barcode Lookup search.", _
+            48, _
+            "MediaCatalog"
+        Exit Sub
+    End If
+
+    If startRow < 1 Or endRow <> startRow Then
+        MsgBox _
+            "Select exactly one data row below the header.", _
+            48, _
+            "MediaCatalog"
+        Exit Sub
+    End If
+
+    upcColumn = FindCalcHeaderColumn( _
+        oSheet, Array("UPC", "UPC Code", "Barcode") _
+    )
+    If upcColumn < 0 Then
+        MsgBox "No UPC column was found in row 1.", 48, "MediaCatalog"
+        Exit Sub
+    End If
+
+    Set oCell = oSheet.getCellByPosition(upcColumn, startRow)
+    upc = NormalizeCalcBarcode(oCell)
+    If Len(upc) <> 12 And Len(upc) <> 13 Then
+        MsgBox _
+            "The selected row does not contain a 12-digit UPC or 13-digit EAN.", _
+            48, _
+            "MediaCatalog"
+        Exit Sub
+    End If
+
+    Set dispatcher = CreateUnoService( _
+        "com.sun.star.frame.DispatchHelper" _
+    )
+    ThisComponent.CurrentController.select(oCell)
+    dispatcher.executeDispatch( _
+        ThisComponent.CurrentController.Frame, _
+        ".uno:Copy", "", 0, Array() _
+    )
+
+    MsgBox _
+        "UPC " & upc & " was copied to the clipboard." & Chr(10) & Chr(10) & _
+        "BarcodeLookup.com will open next. Paste the UPC into its search box." & Chr(10) & _
+        "This manual command does not read the website or modify catalog data.", _
+        64, _
+        "MediaCatalog"
+
+    Set shellExecute = CreateUnoService( _
+        "com.sun.star.system.SystemShellExecute" _
+    )
+    shellExecute.execute("https://www.barcodelookup.com/", "", 0)
+    Exit Sub
+
+ManualLookupError:
+
+    MsgBox _
+        "The manual Barcode Lookup page could not be opened: " & Error$, _
+        48, _
+        "MediaCatalog"
+
+End Sub
+
+
+Function CalcTitleNeedsResolver( _
+    currentTitle As String, _
+    retryMarkers As Boolean _
+) As Boolean
+
+    Dim normalized As String
+
+    normalized = UCase(Trim(currentTitle))
+    If normalized = "" Then
+        CalcTitleNeedsResolver = True
+    ElseIf retryMarkers Then
+        CalcTitleNeedsResolver = _
+            (normalized = "[NOT FOUND]" Or normalized = "[AMBIGUOUS]")
+    End If
+
+End Function
+
+
+Sub ResolveSelectedUPCsByProvider( _
+    providerName As String, _
+    providerCode As String, _
+    scriptFileName As String, _
+    addHyperlink As Boolean, _
+    retryMarkers As Boolean _
+)
+
+    Dim FSO As Object
+    Dim Session As Object
+    Dim oSelection As Object
+    Dim oSheet As Object
+    Dim oCell As Object
+
+    Dim projectPath As String
+    Dim settingsPath As String
+    Dim scriptPath As String
+    Dim pythonCommand As String
+    Dim inputPath As String
+    Dim outputPath As String
+    Dim params As String
+    Dim q As String
+    Dim launched As Boolean
+    Dim tries As Long
+    Dim inputFile As Object
+    Dim outputFile As Object
+    Dim resultLine As String
+    Dim fields As Variant
+
+    Dim i As Long
+    Dim upcColumn As Long
+    Dim urlColumn As Long
+    Dim titleColumn As Long
+    Dim statusColumn As Long
+    Dim upc As String
+    Dim releaseUrl As String
+    Dim requestedCount As Long
+    Dim skippedBlank As Long
+    Dim skippedExisting As Long
+    Dim matched As Long
+    Dim notFound As Long
+    Dim ambiguous As Long
+    Dim failed As Long
+    Dim cancelled As Long
+    Dim failureText As String
+
+    On Error GoTo LookupError
+
+    GlobalScope.BasicLibraries.LoadLibrary("ScriptForge")
+    Set FSO = CreateScriptService("FileSystem")
+    FSO.FileNaming = "SYS"
+    Set Session = CreateScriptService("Session")
+
+    Set oSelection = ThisComponent.CurrentSelection
+
+    If Not oSelection.supportsService( _
+        "com.sun.star.sheet.SheetCellRange") Then
+
+        MsgBox _
+            "Select one or more data rows.", _
+            48, _
+            "UPC Lookup"
+        Exit Sub
+    End If
+
+    If oSelection.RangeAddress.StartRow < 1 Then
+
+        MsgBox _
+            "Select one or more data rows below the header.", _
+            48, _
+            "UPC Lookup"
+        Exit Sub
+    End If
+
+    Set oSheet = oSelection.Spreadsheet
+    upcColumn = FindCalcHeaderColumn( _
+        oSheet, Array("UPC", "UPC Code", "Barcode") _
+    )
+    urlColumn = FindCalcHeaderColumn( _
+        oSheet, Array("Blu-ray.com URL", "Blu-ray URL", "Release URL") _
+    )
+    titleColumn = FindCalcHeaderColumn( _
+        oSheet, Array("Release Title", "Blu-ray.com Title", "DVD Title", "UPCItemDB Name") _
+    )
+    statusColumn = FindCalcHeaderColumn( _
+        oSheet, Array("Status / Error", "Status", "Error") _
+    )
+
+    If upcColumn < 0 Or titleColumn < 0 Or statusColumn < 0 Then
+        MsgBox _
+            "The UPC, Release Title, and Status / Error columns are required.", _
+            16, _
+            "MediaCatalog"
+        Exit Sub
+    End If
+
+    If addHyperlink And urlColumn < 0 Then
+        MsgBox _
+            "The Blu-ray.com URL column is required for BRdC lookup.", _
+            16, _
+            "MediaCatalog"
+        Exit Sub
+    End If
+
+    projectPath = GetProjectPath()
+    settingsPath = GetSettingsPath()
+
+    If projectPath = "" Or settingsPath = "" Then
+        MsgBox _
+            "Could not determine the MediaCatalog project folder.", _
+            16, _
+            "MediaCatalog"
+        Exit Sub
+    End If
+
+    scriptPath = FSO.BuildPath( _
+        FSO.BuildPath(projectPath, "scripts"), _
+        scriptFileName _
+    )
+
+    If Not FSO.FileExists(scriptPath) Then
+        MsgBox _
+            providerName & " helper was not found:" & Chr(10) & _
+            scriptPath, _
+            16, _
+            "MediaCatalog"
+        Exit Sub
+    End If
+
+    pythonCommand = ReadIniValue( _
+        settingsPath, _
+        "runtime", _
+        "python", _
+        "" _
+    )
+
+    If pythonCommand = "" Then
+        MsgBox _
+            "No Python command is configured in settings.ini.", _
+            16, _
+            "MediaCatalog"
+        Exit Sub
+    End If
+
+    inputPath = FSO.GetTempName("tsv")
+    outputPath = FSO.GetTempName("tsv")
+    Set inputFile = FSO.CreateTextFile(inputPath, True, "UTF-8")
+    inputFile.WriteLine( _
+        "row" & Chr(9) & "upc" & Chr(9) & "url" _
+    )
+
+    For i = oSelection.RangeAddress.StartRow To _
+            oSelection.RangeAddress.EndRow
+
+        Set oCell = oSheet.getCellByPosition(upcColumn, i)
+        upc = NormalizeCalcBarcode(oCell)
+        releaseUrl = ""
+        If addHyperlink Then
+            releaseUrl = Trim( _
+                oSheet.getCellByPosition(urlColumn, i).String _
+            )
+        End If
+
+        If upc = "" And releaseUrl = "" Then
+            skippedBlank = skippedBlank + 1
+        ElseIf Not CalcTitleNeedsResolver( _
+            oSheet.getCellByPosition(titleColumn, i).String, _
+            retryMarkers _
+        ) Then
+            skippedExisting = skippedExisting + 1
+        Else
+            inputFile.WriteLine( _
+                CStr(i) & Chr(9) & upc & Chr(9) & releaseUrl _
+            )
+            requestedCount = requestedCount + 1
+        End If
+
+    Next i
+
+    inputFile.CloseFile()
+
+    If requestedCount = 0 Then
+        MsgBox _
+            "No selected UPCs required lookup." & Chr(10) & Chr(10) & _
+            "Blank: " & CStr(skippedBlank) & Chr(10) & _
+            "Already populated: " & CStr(skippedExisting), _
+            64, _
+            "UPC Lookup"
+        GoTo Cleanup
+    End If
+
+    q = Chr(34)
+    params = _
+        "-E " & q & scriptPath & q & " " & _
+        q & inputPath & q & " " & q & outputPath & q
+
+    launched = Session.RunApplication(pythonCommand, params)
+    If Not launched Then
+        failureText = "LibreOffice could not launch Python"
+        GoTo ShowSummary
+    End If
+
+    For tries = 1 To 432000
+        If FSO.FileExists(outputPath) Then Exit For
+        Wait 100
+    Next tries
+
+    If Not FSO.FileExists(outputPath) Then
+        failureText = "Python produced no " & providerName & " response"
+        GoTo ShowSummary
+    End If
+
+    Set outputFile = FSO.OpenTextFile( _
+        outputPath, FSO.ForReading, False, "UTF-8" _
+    )
+
+    If IsNull(outputFile) Then
+        failureText = "Could not read the " & providerName & " response"
+        GoTo ShowSummary
+    End If
+
+    If Not outputFile.AtEndOfStream Then resultLine = outputFile.ReadLine()
+
+    Do While Not outputFile.AtEndOfStream
+        resultLine = outputFile.ReadLine()
+        If Trim(resultLine) <> "" Then
+            fields = Split(resultLine, Chr(9))
+
+            If UBound(fields) >= 6 Then
+                i = CLng(fields(0))
+
+                Select Case fields(2)
+                    Case "OK"
+                        If addHyperlink Then
+                            SetCalcCellHyperlink _
+                                oSheet.getCellByPosition(titleColumn, i), _
+                                fields(6), _
+                                fields(3)
+                            SetCalcCellHyperlink _
+                                oSheet.getCellByPosition(urlColumn, i), _
+                                fields(6), _
+                                fields(6)
+                        Else
+                            SetCalcCellHyperlink _
+                                oSheet.getCellByPosition(titleColumn, i), _
+                                "", _
+                                fields(3)
+                        End If
+                        If fields(4) = "No UPC/EAN, URL OK" Then
+                            oSheet.getCellByPosition( _
+                                statusColumn, i _
+                            ).String = fields(4)
+                        Else
+                            oSheet.getCellByPosition( _
+                                statusColumn, i _
+                            ).String = "UPC OK - " & providerCode
+                        End If
+                        matched = matched + 1
+                    Case "NOT_FOUND"
+                        oSheet.getCellByPosition(titleColumn, i).String = "[NOT FOUND]"
+                        oSheet.getCellByPosition(statusColumn, i).String = _
+                            providerCode & ": " & fields(5)
+                        notFound = notFound + 1
+                    Case "AMBIGUOUS"
+                        oSheet.getCellByPosition(titleColumn, i).String = "[AMBIGUOUS]"
+                        oSheet.getCellByPosition(statusColumn, i).String = _
+                            providerCode & ": " & fields(5)
+                        ambiguous = ambiguous + 1
+                    Case "CANCELLED"
+                        oSheet.getCellByPosition(statusColumn, i).String = _
+                            providerCode & ": Cancelled by user"
+                        cancelled = cancelled + 1
+                    Case Else
+                        oSheet.getCellByPosition(statusColumn, i).String = _
+                            providerCode & ": " & fields(5)
+                        failed = failed + 1
+                End Select
+            Else
+                failed = failed + 1
+            End If
+        End If
+    Loop
+
+    outputFile.CloseFile()
+
+ShowSummary:
+
+    If failureText <> "" Then
+        MsgBox _
+            providerName & " lookup failed:" & Chr(10) & Chr(10) & _
+            failureText, _
+            48, _
+            "UPC Lookup"
+    Else
+        MsgBox _
+            providerName & " lookup finished." & Chr(10) & Chr(10) & _
+            "Matched: " & CStr(matched) & Chr(10) & _
+            "Not found: " & CStr(notFound) & Chr(10) & _
+            "Ambiguous: " & CStr(ambiguous) & Chr(10) & _
+            "Cancelled: " & CStr(cancelled) & Chr(10) & _
+            "Errors: " & CStr(failed) & Chr(10) & _
+            "Already populated: " & CStr(skippedExisting) & Chr(10) & _
+            "Blank: " & CStr(skippedBlank), _
+            IIf(failed + notFound + ambiguous + cancelled > 0, 48, 64), _
+            "UPC Lookup"
+    End If
+
+Cleanup:
+
+    On Error Resume Next
+    If inputPath <> "" Then
+        If FSO.FileExists(inputPath) Then FSO.DeleteFile(inputPath)
+    End If
+    If outputPath <> "" Then
+        If FSO.FileExists(outputPath) Then FSO.DeleteFile(outputPath)
+    End If
+    On Error GoTo 0
+    Exit Sub
+
+LookupError:
+
+    failureText = Error$
+    Resume ShowSummary
+
+End Sub
+
+
+' ============================================================================
+' Legacy direct UPCItemDB lookup retained for reference; not used by v0.3.0.
+' ============================================================================
+
+Sub ResolveSelectedUPCsLegacy()
+
+    Dim oSelection As Object
+    Dim oSheet As Object
+    Dim oCell As Object
+
+    Dim settingsPath As String
+    Dim endpoint As String
+    Dim delaySeconds As Double
+
+    Dim i As Long
+    Dim upcColumn As Long
+    Dim titleColumn As Long
+    Dim upc As String
+    Dim upcName As String
+    Dim failures As String
+
+    Set oSelection = ThisComponent.CurrentSelection
+
+    If Not oSelection.supportsService( _
+        "com.sun.star.sheet.SheetCellRange") Then
+
+        MsgBox _
+            "Select one or more data rows.", _
+            48, _
+            "UPC Lookup"
+        Exit Sub
+    End If
+
+    If oSelection.RangeAddress.StartRow < 1 Then
+
+        MsgBox _
+            "Select one or more data rows below the header.", _
+            48, _
+            "UPC Lookup"
+        Exit Sub
+    End If
+
+    Set oSheet = oSelection.Spreadsheet
+    upcColumn = FindCalcHeaderColumn(oSheet, Array("UPC", "UPC Code", "Barcode"))
+    titleColumn = FindCalcHeaderColumn( _
+        oSheet, Array("Release Title", "Blu-ray.com Title", "DVD Title", "UPCItemDB Name") _
+    )
+
+    If upcColumn < 0 Or titleColumn < 0 Then
+        MsgBox _
+            "The UPC and Release Title columns are required.", _
+            16, _
+            "MediaCatalog"
+        Exit Sub
+    End If
+
+    settingsPath = GetSettingsPath()
+
+    If settingsPath = "" Then
+        MsgBox _
+            "Could not determine the MediaCatalog project folder.", _
+            16, _
+            "MediaCatalog"
+        Exit Sub
+    End If
+
+    endpoint = ReadIniValue( _
+        settingsPath, _
+        "upcitemdb", _
+        "endpoint", _
+        "https://api.upcitemdb.com/prod/trial/lookup?upc=" _
+    )
+
+    delaySeconds = Val( _
+        ReadIniValue( _
+            settingsPath, _
+            "upcitemdb", _
+            "request_delay_seconds", _
+            "10.5" _
+        ) _
+    )
+
+    If delaySeconds < 0 Then delaySeconds = 0
+
+    failures = ""
+
+    For i = oSelection.RangeAddress.StartRow To _
+            oSelection.RangeAddress.EndRow
+
+        Set oCell = oSheet.getCellByPosition(upcColumn, i)
+        upc = Trim(oCell.String)
+
+        If upc <> "" Then
+
+            ' Preserve an existing UPCItemDB name so manual review or
+            ' previous successful lookups are not overwritten.
+            If Trim(oSheet.getCellByPosition(titleColumn, i).String) = "" Then
+
+                upcName = LookupUPCItemDB(upc, endpoint)
+
+                If Left(upcName, 6) = "ERROR:" Then
+
+                    failures = failures & _
+                        upc & ": " & _
+                        Mid(upcName, 7) & Chr(10)
+
+                Else
+
+                    oSheet.getCellByPosition(titleColumn, i).String = upcName
+
+                End If
+
+                If i < oSelection.RangeAddress.EndRow And _
+                   delaySeconds > 0 Then
+
+                    Wait CLng(delaySeconds * 1000)
+
+                End If
+
+            End If
+
+        End If
+
+    Next i
+
+    If failures <> "" Then
+
+        MsgBox _
+            "UPC lookup finished, but some rows were not resolved:" & _
+            Chr(10) & Chr(10) & _
+            failures, _
+            48, _
+            "UPC Lookup"
+
+    Else
+
+        MsgBox _
+            "Selected UPCs resolved.", _
+            64, _
+            "UPC Lookup"
+
+    End If
+
+End Sub
+
+
+Function LookupUPCItemDB( _
+    upc As String, _
+    endpoint As String _
+) As String
+
+    Dim session As Object
+    Dim response As String
+    Dim title As String
+
+    On Error GoTo LookupError
+
+    GlobalScope.BasicLibraries.LoadLibrary("ScriptForge")
+    Set session = CreateScriptService("Session")
+
+    response = session.WebService(endpoint & upc)
+
+    If response = "" Then
+        LookupUPCItemDB = "ERROR:empty response"
+        Exit Function
+    End If
+
+    title = ExtractJsonString(response, "title")
+
+    If title = "" Then
+        LookupUPCItemDB = "ERROR:no title returned"
+    Else
+        LookupUPCItemDB = title
+    End If
+
+    Exit Function
+
+LookupError:
+
+    LookupUPCItemDB = "ERROR:" & Error$
+
+End Function
+
+
+Function ExtractJsonString( _
+    json As String, _
+    key As String _
+) As String
+
+    Dim marker As String
+    Dim p As Long
+    Dim i As Long
+    Dim ch As String
+    Dim result As String
+    Dim escaped As Boolean
+
+    marker = Chr(34) & key & Chr(34) & ":" & Chr(34)
+    p = InStr(json, marker)
+
+    If p = 0 Then
+        ExtractJsonString = ""
+        Exit Function
+    End If
+
+    i = p + Len(marker)
+
+    Do While i <= Len(json)
+
+        ch = Mid(json, i, 1)
+
+        If escaped Then
+
+            Select Case ch
+                Case Chr(34)
+                    result = result & Chr(34)
+                Case "\"
+                    result = result & "\"
+                Case "/"
+                    result = result & "/"
+                Case "n"
+                    result = result & Chr(10)
+                Case "r"
+                    result = result & Chr(13)
+                Case "t"
+                    result = result & Chr(9)
+                Case Else
+                    result = result & ch
+            End Select
+
+            escaped = False
+
+        ElseIf ch = "\" Then
+
+            escaped = True
+
+        ElseIf ch = Chr(34) Then
+
+            Exit Do
+
+        Else
+
+            result = result & ch
+
+        End If
+
+        i = i + 1
+
+    Loop
+
+    ExtractJsonString = result
+
+End Function
+
+
+' ============================================================================
+' Blu-ray.com release-detail enrichment
+' ============================================================================
+
+Function NormalizeCalcHeader(value As String) As String
+
+    Dim result As String
+    Dim character As String
+    Dim i As Long
+
+    value = LCase(Trim(value))
+
+    For i = 1 To Len(value)
+        character = Mid(value, i, 1)
+        If (character >= "a" And character <= "z") Or _
+           (character >= "0" And character <= "9") Then
+            result = result & character
+        End If
+    Next i
+
+    NormalizeCalcHeader = result
+
+End Function
+
+
+Function FindCalcHeaderColumn( _
+    oSheet As Object, _
+    candidates As Variant _
+) As Long
+
+    Dim columnNumber As Long
+    Dim candidate As Variant
+    Dim normalized As String
+
+    FindCalcHeaderColumn = -1
+
+    For columnNumber = 0 To 99
+        normalized = NormalizeCalcHeader( _
+            oSheet.getCellByPosition(columnNumber, 0).String _
+        )
+
+        For Each candidate In candidates
+            If normalized = NormalizeCalcHeader(CStr(candidate)) Then
+                FindCalcHeaderColumn = columnNumber
+                Exit Function
+            End If
+        Next candidate
+    Next columnNumber
+
+End Function
+
+
+Function AllCalcDetailsPopulated( _
+    oSheet As Object, _
+    rowNum As Long, _
+    columns As Variant _
+) As Boolean
+
+    Dim columnValue As Variant
+
+    For Each columnValue In columns
+        If Trim(oSheet.getCellByPosition( _
+            CLng(columnValue), rowNum _
+        ).String) = "" Then
+            Exit Function
+        End If
+    Next columnValue
+
+    AllCalcDetailsPopulated = True
+
+End Function
+
+
+Sub SetCalcTextIfBlank( _
+    oCell As Object, _
+    value As String _
+)
+
+    If Trim(oCell.String) = "" And Trim(value) <> "" Then
+        oCell.String = value
+    End If
+
+End Sub
+
+
+Sub SetCalcNumberIfBlank( _
+    oCell As Object, _
+    value As String _
+)
+
+    If Trim(oCell.String) = "" And IsNumeric(value) Then
+        oCell.Value = CDbl(value)
+    End If
+
+End Sub
+
+
+Sub SetCalcIsoDateIfBlank( _
+    oCell As Object, _
+    value As String _
+)
+
+    Dim locale As New com.sun.star.lang.Locale
+    Dim formatKey As Long
+
+    If Trim(oCell.String) <> "" Or value = "" Then Exit Sub
+
+    On Error GoTo TextFallback
+
+    If Len(value) = 10 And Mid(value, 5, 1) = "-" And _
+       Mid(value, 8, 1) = "-" Then
+
+        oCell.Value = CDbl(DateSerial( _
+            CInt(Left(value, 4)), _
+            CInt(Mid(value, 6, 2)), _
+            CInt(Right(value, 2)) _
+        ))
+
+        locale.Language = "en"
+        locale.Country = "US"
+        formatKey = ThisComponent.NumberFormats.queryKey( _
+            "YYYY-MM-DD", locale, True _
+        )
+        If formatKey = -1 Then
+            formatKey = ThisComponent.NumberFormats.addNew( _
+                "YYYY-MM-DD", locale _
+            )
+        End If
+        oCell.NumberFormat = formatKey
+    Else
+        oCell.String = value
+    End If
+
+    Exit Sub
+
+TextFallback:
+
+    oCell.String = value
+
+End Sub
+
+
+Sub EnrichSelectedBluRayDetails()
+
+    Dim FSO As Object
+    Dim Session As Object
+    Dim oSelection As Object
+    Dim oSheet As Object
+
+    Dim projectPath As String
+    Dim settingsPath As String
+    Dim scriptPath As String
+    Dim pythonCommand As String
+    Dim inputPath As String
+    Dim outputPath As String
+    Dim params As String
+    Dim q As String
+    Dim launched As Boolean
+    Dim tries As Long
+    Dim inputFile As Object
+    Dim outputFile As Object
+    Dim resultLine As String
+    Dim fields As Variant
+
+    Dim startRow As Long
+    Dim endRow As Long
+    Dim rowNum As Long
+    Dim upcColumn As Long
+    Dim urlColumn As Long
+    Dim statusColumn As Long
+    Dim studioColumn As Long
+    Dim blurayYearColumn As Long
+    Dim blurayRuntimeColumn As Long
+    Dim ratingColumn As Long
+    Dim releaseDateColumn As Long
+    Dim discFormatColumn As Long
+    Dim videoCodecColumn As Long
+    Dim resolutionColumn As Long
+    Dim aspectRatioColumn As Long
+    Dim discCountColumn As Long
+    Dim detailColumns As Variant
+    Dim upc As String
+    Dim releaseUrl As String
+    Dim requestedCount As Long
+    Dim skippedBlank As Long
+    Dim skippedExisting As Long
+    Dim enriched As Long
+    Dim failed As Long
+    Dim cancelled As Long
+    Dim failureText As String
+
+    On Error GoTo EnrichmentError
+
+    GlobalScope.BasicLibraries.LoadLibrary("ScriptForge")
+    Set FSO = CreateScriptService("FileSystem")
+    FSO.FileNaming = "SYS"
+    Set Session = CreateScriptService("Session")
+    Set oSelection = ThisComponent.CurrentSelection
+    Set oSheet = ThisComponent.CurrentController.ActiveSheet
+
+    If oSelection.supportsService( _
+        "com.sun.star.sheet.SheetCell") Then
+        startRow = oSelection.CellAddress.Row
+        endRow = startRow
+    ElseIf oSelection.supportsService( _
+        "com.sun.star.sheet.SheetCellRange") Then
+        startRow = oSelection.RangeAddress.StartRow
+        endRow = oSelection.RangeAddress.EndRow
+    Else
+        MsgBox _
+            "Select one or more data rows to enrich.", _
+            48, _
+            "MediaCatalog"
+        Exit Sub
+    End If
+
+    If endRow < 1 Then
+        MsgBox _
+            "Select one or more data rows below the header.", _
+            48, _
+            "MediaCatalog"
+        Exit Sub
+    End If
+    If startRow < 1 Then startRow = 1
+
+    upcColumn = FindCalcHeaderColumn(oSheet, Array("UPC", "UPC Code", "Barcode"))
+    urlColumn = FindCalcHeaderColumn(oSheet, Array("Blu-ray.com URL", "Blu-ray URL", "Release URL"))
+    statusColumn = FindCalcHeaderColumn(oSheet, Array("Status / Error", "Status", "Error"))
+    studioColumn = FindCalcHeaderColumn(oSheet, Array("Studio", "Blu-ray Studio"))
+    blurayYearColumn = FindCalcHeaderColumn(oSheet, Array("Blu-ray Year", "Release Year"))
+    blurayRuntimeColumn = FindCalcHeaderColumn(oSheet, Array("Blu-ray Runtime", "Release Runtime"))
+    ratingColumn = FindCalcHeaderColumn(oSheet, Array("Content Rating", "Blu-ray Rating"))
+    releaseDateColumn = FindCalcHeaderColumn(oSheet, Array("Physical Release Date", "Release Date"))
+    discFormatColumn = FindCalcHeaderColumn(oSheet, Array("Disc Format", "Disk Format"))
+    videoCodecColumn = FindCalcHeaderColumn(oSheet, Array("Video Codec", "Codec"))
+    resolutionColumn = FindCalcHeaderColumn(oSheet, Array("Resolution", "Video Resolution"))
+    aspectRatioColumn = FindCalcHeaderColumn(oSheet, Array("Aspect Ratio"))
+    discCountColumn = FindCalcHeaderColumn(oSheet, Array("Disc Count / Capacities", "Disc Count and Capacities", "Disk Count and Capacities"))
+
+    If upcColumn < 0 Or urlColumn < 0 Or studioColumn < 0 Or blurayYearColumn < 0 Or _
+       blurayRuntimeColumn < 0 Or ratingColumn < 0 Or releaseDateColumn < 0 Or _
+       discFormatColumn < 0 Or videoCodecColumn < 0 Or resolutionColumn < 0 Or _
+       aspectRatioColumn < 0 Or discCountColumn < 0 Then
+
+        MsgBox _
+            "One or more v0.3.0 Blu-ray columns are missing.", _
+            16, _
+            "MediaCatalog"
+        Exit Sub
+    End If
+
+    detailColumns = Array( _
+        studioColumn, blurayYearColumn, blurayRuntimeColumn, _
+        ratingColumn, releaseDateColumn, discFormatColumn, _
+        videoCodecColumn, resolutionColumn, aspectRatioColumn, _
+        discCountColumn _
+    )
+
+    projectPath = GetProjectPath()
+    settingsPath = GetSettingsPath()
+    scriptPath = FSO.BuildPath( _
+        FSO.BuildPath(projectPath, "scripts"), _
+        "bluray_details.py" _
+    )
+    pythonCommand = ReadIniValue( _
+        settingsPath, "runtime", "python", "" _
+    )
+
+    If projectPath = "" Or settingsPath = "" Or _
+       Not FSO.FileExists(scriptPath) Or pythonCommand = "" Then
+
+        MsgBox _
+            "The project path, Python command, or Blu-ray detail helper is missing.", _
+            16, _
+            "MediaCatalog"
+        Exit Sub
+    End If
+
+    inputPath = FSO.GetTempName("tsv")
+    outputPath = FSO.GetTempName("tsv")
+    Set inputFile = FSO.CreateTextFile(inputPath, True, "UTF-8")
+    inputFile.WriteLine( _
+        "row" & Chr(9) & "upc" & Chr(9) & "url" _
+    )
+
+    For rowNum = startRow To endRow
+        If AllCalcDetailsPopulated( _
+            oSheet, rowNum, detailColumns _
+        ) Then
+            skippedExisting = skippedExisting + 1
+        Else
+            upc = NormalizeCalcBarcode( _
+                oSheet.getCellByPosition(upcColumn, rowNum) _
+            )
+            releaseUrl = Trim( _
+                oSheet.getCellByPosition(urlColumn, rowNum).String _
+            )
+            If upc = "" And releaseUrl = "" Then
+                skippedBlank = skippedBlank + 1
+            Else
+                inputFile.WriteLine( _
+                    CStr(rowNum) & Chr(9) & upc & Chr(9) & releaseUrl _
+                )
+                requestedCount = requestedCount + 1
+            End If
+        End If
+    Next rowNum
+
+    inputFile.CloseFile()
+
+    If requestedCount = 0 Then
+        MsgBox _
+            "No selected rows required Blu-ray detail enrichment." & _
+            Chr(10) & Chr(10) & _
+            "Already populated: " & CStr(skippedExisting) & Chr(10) & _
+            "No UPC or release link: " & CStr(skippedBlank), _
+            64, _
+            "MediaCatalog"
+        GoTo EnrichmentCleanup
+    End If
+
+    q = Chr(34)
+    params = _
+        "-E " & q & scriptPath & q & " " & _
+        q & inputPath & q & " " & q & outputPath & q
+
+    launched = Session.RunApplication(pythonCommand, params)
+    If Not launched Then
+        failureText = "LibreOffice could not launch Python"
+        GoTo EnrichmentSummary
+    End If
+
+    For tries = 1 To 432000
+        If FSO.FileExists(outputPath) Then Exit For
+        Wait 100
+    Next tries
+
+    If Not FSO.FileExists(outputPath) Then
+        failureText = "Python produced no Blu-ray detail response"
+        GoTo EnrichmentSummary
+    End If
+
+    Set outputFile = FSO.OpenTextFile( _
+        outputPath, FSO.ForReading, False, "UTF-8" _
+    )
+    If IsNull(outputFile) Then
+        failureText = "Could not read the Blu-ray detail response"
+        GoTo EnrichmentSummary
+    End If
+
+    If Not outputFile.AtEndOfStream Then resultLine = outputFile.ReadLine()
+
+    Do While Not outputFile.AtEndOfStream
+        resultLine = outputFile.ReadLine()
+        If Trim(resultLine) <> "" Then
+            fields = Split(resultLine, Chr(9))
+
+            If UBound(fields) >= 15 Then
+                rowNum = CLng(fields(0))
+
+                If fields(2) = "OK" Then
+                    SetCalcTextIfBlank oSheet.getCellByPosition(studioColumn, rowNum), fields(6)
+                    SetCalcTextIfBlank oSheet.getCellByPosition(blurayYearColumn, rowNum), fields(7)
+                    SetCalcNumberIfBlank oSheet.getCellByPosition(blurayRuntimeColumn, rowNum), fields(8)
+                    SetCalcTextIfBlank oSheet.getCellByPosition(ratingColumn, rowNum), fields(9)
+                    SetCalcIsoDateIfBlank oSheet.getCellByPosition(releaseDateColumn, rowNum), fields(10)
+                    SetCalcTextIfBlank oSheet.getCellByPosition(discFormatColumn, rowNum), fields(11)
+                    SetCalcTextIfBlank oSheet.getCellByPosition(videoCodecColumn, rowNum), fields(12)
+                    SetCalcTextIfBlank oSheet.getCellByPosition(resolutionColumn, rowNum), fields(13)
+                    SetCalcTextIfBlank oSheet.getCellByPosition(aspectRatioColumn, rowNum), fields(14)
+                    SetCalcTextIfBlank oSheet.getCellByPosition(discCountColumn, rowNum), fields(15)
+
+                    If fields(5) <> "" Then
+                        SetCalcCellHyperlink _
+                            oSheet.getCellByPosition(urlColumn, rowNum), _
+                            fields(5), _
+                            fields(5)
+                    End If
+
+                    If statusColumn >= 0 Then
+                        If fields(3) = "No UPC/EAN, URL OK" Then
+                            oSheet.getCellByPosition( _
+                                statusColumn, rowNum _
+                            ).String = fields(3)
+                        ElseIf Trim(oSheet.getCellByPosition( _
+                            statusColumn, rowNum _
+                            ).String) = "" Then
+                            oSheet.getCellByPosition( _
+                                statusColumn, rowNum _
+                            ).String = "Blu-ray details OK"
+                        End If
+                    End If
+                    enriched = enriched + 1
+                ElseIf fields(2) = "CANCELLED" Then
+                    If statusColumn >= 0 Then
+                        oSheet.getCellByPosition( _
+                            statusColumn, rowNum _
+                        ).String = "Blu-ray details cancelled"
+                    End If
+                    cancelled = cancelled + 1
+                Else
+                    If statusColumn >= 0 Then
+                        oSheet.getCellByPosition( _
+                            statusColumn, rowNum _
+                        ).String = fields(4)
+                    End If
+                    failed = failed + 1
+                End If
+            Else
+                failed = failed + 1
+            End If
+        End If
+    Loop
+
+    outputFile.CloseFile()
+
+EnrichmentSummary:
+
+    If failureText <> "" Then
+        MsgBox _
+            "Blu-ray detail enrichment failed:" & Chr(10) & Chr(10) & _
+            failureText, _
+            48, _
+            "MediaCatalog"
+    Else
+        MsgBox _
+            "Blu-ray detail enrichment finished." & Chr(10) & Chr(10) & _
+            "Enriched: " & CStr(enriched) & Chr(10) & _
+            "Cancelled: " & CStr(cancelled) & Chr(10) & _
+            "Errors: " & CStr(failed) & Chr(10) & _
+            "Already populated: " & CStr(skippedExisting) & Chr(10) & _
+            "No UPC or release link: " & CStr(skippedBlank), _
+            IIf(failed + cancelled > 0, 48, 64), _
+            "MediaCatalog"
+    End If
+
+EnrichmentCleanup:
+
+    On Error Resume Next
+    If inputPath <> "" Then
+        If FSO.FileExists(inputPath) Then FSO.DeleteFile(inputPath)
+    End If
+    If outputPath <> "" Then
+        If FSO.FileExists(outputPath) Then FSO.DeleteFile(outputPath)
+    End If
+    On Error GoTo 0
+    Exit Sub
+
+EnrichmentError:
+
+    failureText = Error$
+    Resume EnrichmentSummary
+
+End Sub
+
+
+' ============================================================================
+' Release Title / IMDb ID -> IMDb metadata
+' ============================================================================
+
+Function LookupIMDbRow( _
+    oSheet As Object, _
+    rowNum As Long, _
+    FSO As Object, _
+    Session As Object, _
+    pythonCommand As String, _
+    scriptPath As String _
+) As String
+
+    Dim rawName As String
+    Dim imdbIdHint As String
+
+    Dim inputPath As String
+    Dim outputPath As String
+    Dim params As String
+    Dim q As String
+
+    Dim launched As Boolean
+    Dim tries As Integer
+
+    Dim inputFile As Object
+    Dim outputFile As Object
+
+    Dim resultLine As String
+    Dim fields As Variant
+    Dim failureText As String
+    Dim releaseTitleColumn As Long
+    Dim imdbUrlColumn As Long
+    Dim imdbIdColumn As Long
+    Dim imdbTitleColumn As Long
+    Dim imdbYearColumn As Long
+    Dim imdbRuntimeColumn As Long
+    Dim imdbTitleTypeColumn As Long
+    Dim imdbSeasonColumn As Long
+    Dim statusColumn As Long
+
+    LookupIMDbRow = "ERROR:Unknown IMDb lookup error"
+
+    releaseTitleColumn = FindCalcHeaderColumn( _
+        oSheet, Array("Release Title", "Blu-ray.com Title", "DVD Title", "UPCItemDB Name") _
+    )
+    imdbUrlColumn = FindCalcHeaderColumn(oSheet, Array("IMDb URL"))
+    imdbIdColumn = FindCalcHeaderColumn(oSheet, Array("IMDb ID"))
+    imdbTitleColumn = FindCalcHeaderColumn(oSheet, Array("Title", "IMDb Title"))
+    imdbYearColumn = FindCalcHeaderColumn(oSheet, Array("Year", "IMDb Year"))
+    imdbRuntimeColumn = FindCalcHeaderColumn(oSheet, Array("Runtime", "IMDb Runtime"))
+    imdbTitleTypeColumn = FindCalcHeaderColumn(oSheet, Array("Title Type", "IMDb Title Type"))
+    imdbSeasonColumn = FindCalcHeaderColumn(oSheet, Array("Season", "IMDb Season"))
+    statusColumn = FindCalcHeaderColumn(oSheet, Array("Status / Error", "Status", "Error"))
+
+    If releaseTitleColumn < 0 Or imdbUrlColumn < 0 Or imdbIdColumn < 0 Or _
+       imdbTitleColumn < 0 Or imdbYearColumn < 0 Or imdbRuntimeColumn < 0 Or _
+       imdbTitleTypeColumn < 0 Or imdbSeasonColumn < 0 Or statusColumn < 0 Then
+        LookupIMDbRow = "ERROR:One or more required catalog columns are missing"
+        Exit Function
+    End If
+
+    rawName = Trim( _
+        oSheet.getCellByPosition(releaseTitleColumn, rowNum).String _
+    )
+
+    If rawName = "" Then
+        LookupIMDbRow = "SKIP_BLANK"
+        Exit Function
+    End If
+
+    ' IMDb ID is the only authoritative user-correction field.
+    ' Blank means "use automatic title matching".
+    ' Nonblank means "resolve exactly this IMDb ID".
+    imdbIdHint = Trim( _
+        oSheet.getCellByPosition(imdbIdColumn, rowNum).String _
+    )
+
+    On Error GoTo RowError
+
+    inputPath = FSO.GetTempName("txt")
+    outputPath = FSO.GetTempName("tsv")
+
+    Set inputFile = FSO.CreateTextFile( _
+        inputPath, _
+        True, _
+        "UTF-8" _
+    )
+
+    ' Line 1: raw Blu-ray.com release title.
+    ' Line 2: current IMDb ID, blank for automatic matching.
+    inputFile.WriteLine(rawName)
+    inputFile.WriteLine(imdbIdHint)
+    inputFile.CloseFile()
+
+    q = Chr(34)
+
+    ' -E prevents LibreOffice's bundled Python environment from
+    ' contaminating the external Python interpreter on Windows.
+    params = _
+        "-E " & _
+        q & scriptPath & q & " " & _
+        q & inputPath & q & " " & _
+        q & outputPath & q
+
+    launched = Session.RunApplication( _
+        pythonCommand, _
+        params _
+    )
+
+    If Not launched Then
+        failureText = "LibreOffice could not launch Python"
+        oSheet.getCellByPosition(statusColumn, rowNum).String = failureText
+        LookupIMDbRow = "ERROR:" & failureText
+        GoTo Cleanup
+    End If
+
+    For tries = 1 To 100
+
+        If FSO.FileExists(outputPath) Then Exit For
+
+        Wait 100
+
+    Next tries
+
+    If Not FSO.FileExists(outputPath) Then
+        failureText = "Python produced no IMDb response"
+        oSheet.getCellByPosition(statusColumn, rowNum).String = failureText
+        LookupIMDbRow = "ERROR:" & failureText
+        GoTo Cleanup
+    End If
+
+    Set outputFile = FSO.OpenTextFile( _
+        outputPath, _
+        FSO.ForReading, _
+        False, _
+        "UTF-8" _
+    )
+
+    If IsNull(outputFile) Then
+        failureText = "Could not read the IMDb response"
+        oSheet.getCellByPosition(statusColumn, rowNum).String = failureText
+        LookupIMDbRow = "ERROR:" & failureText
+        GoTo Cleanup
+    End If
+
+    resultLine = outputFile.ReadLine()
+    outputFile.CloseFile()
+
+    fields = Split(resultLine, Chr(9))
+
+    If UBound(fields) < 9 Then
+        failureText = "Python returned an incomplete IMDb response"
+        oSheet.getCellByPosition(statusColumn, rowNum).String = failureText
+        LookupIMDbRow = "ERROR:" & failureText
+        GoTo Cleanup
+    End If
+
+    If fields(0) = "1" Then
+
+        oSheet.getCellByPosition(imdbUrlColumn, rowNum).String = fields(2)
+
+        oSheet.getCellByPosition(imdbIdColumn, rowNum).String = fields(1)
+
+        oSheet.getCellByPosition(imdbTitleColumn, rowNum).String = fields(3)
+
+        If fields(4) <> "" Then
+            oSheet.getCellByPosition(imdbYearColumn, rowNum).Value = CDbl(fields(4))
+        Else
+            oSheet.getCellByPosition(imdbYearColumn, rowNum).String = ""
+        End If
+
+        If fields(5) <> "" Then
+            oSheet.getCellByPosition(imdbRuntimeColumn, rowNum).Value = CDbl(fields(5))
+        Else
+            oSheet.getCellByPosition(imdbRuntimeColumn, rowNum).String = ""
+        End If
+
+        oSheet.getCellByPosition(imdbTitleTypeColumn, rowNum).String = fields(6)
+
+        If fields(7) <> "" Then
+            oSheet.getCellByPosition(imdbSeasonColumn, rowNum).Value = CDbl(fields(7))
+        Else
+            oSheet.getCellByPosition(imdbSeasonColumn, rowNum).String = ""
+        End If
+
+        If fields(9) = "imdb_id" Then
+            oSheet.getCellByPosition(statusColumn, rowNum).String = "OK - IMDb ID"
+        Else
+            oSheet.getCellByPosition(statusColumn, rowNum).String = "OK"
+        End If
+
+        LookupIMDbRow = "RESOLVED"
+
+    Else
+
+        failureText = fields(8)
+
+        If failureText = "" Then
+            failureText = "No exact IMDb match found"
+        End If
+
+        oSheet.getCellByPosition(statusColumn, rowNum).String = failureText
+        LookupIMDbRow = "ERROR:" & failureText
+
+    End If
+
+Cleanup:
+
+    On Error Resume Next
+
+    If inputPath <> "" Then
+        If FSO.FileExists(inputPath) Then
+            FSO.DeleteFile(inputPath)
+        End If
+    End If
+
+    If outputPath <> "" Then
+        If FSO.FileExists(outputPath) Then
+            FSO.DeleteFile(outputPath)
+        End If
+    End If
+
+    On Error GoTo 0
+
+    Exit Function
+
+RowError:
+
+    failureText = Error$
+
+    On Error Resume Next
+    If statusColumn >= 0 Then
+        oSheet.getCellByPosition(statusColumn, rowNum).String = failureText
+    End If
+    On Error GoTo 0
+
+    LookupIMDbRow = "ERROR:" & failureText
+
+    Resume Cleanup
+
+End Function
+
+
+Sub LookupIMDbForCurrentRow()
+
+    Dim FSO As Object
+    Dim Session As Object
+    Dim oSheet As Object
+    Dim oSelection As Object
+
+    Dim projectPath As String
+    Dim settingsPath As String
+    Dim scriptPath As String
+    Dim pythonCommand As String
+
+    Dim startRow As Long
+    Dim endRow As Long
+    Dim rowNum As Long
+
+    Dim result As String
+    Dim failures As String
+
+    Dim resolvedCount As Long
+    Dim blankCount As Long
+    Dim failedCount As Long
+
+    Dim summary As String
+
+    On Error GoTo LookupError
+
+    GlobalScope.BasicLibraries.LoadLibrary("ScriptForge")
+
+    Set FSO = CreateScriptService("FileSystem")
+    FSO.FileNaming = "SYS"
+
+    Set Session = CreateScriptService("Session")
+
+    Set oSheet = ThisComponent.CurrentController.ActiveSheet
+    Set oSelection = ThisComponent.CurrentSelection
+
+    ' Keep this macro name for compatibility with existing MediaCatalog
+    ' menu entries. It processes every row in the current selection.
+    If oSelection.supportsService( _
+        "com.sun.star.sheet.SheetCell") Then
+
+        startRow = oSelection.CellAddress.Row
+        endRow = startRow
+
+    ElseIf oSelection.supportsService( _
+        "com.sun.star.sheet.SheetCellRange") Then
+
+        startRow = oSelection.RangeAddress.StartRow
+        endRow = oSelection.RangeAddress.EndRow
+
+    Else
+
+        MsgBox _
+            "Select one or more rows to process.", _
+            48, _
+            "MediaCatalog"
+        Exit Sub
+
+    End If
+
+    If endRow < 1 Then
+        MsgBox _
+            "Select one or more data rows below the header.", _
+            48, _
+            "MediaCatalog"
+        Exit Sub
+    End If
+
+    If startRow < 1 Then startRow = 1
+
+    projectPath = GetProjectPath()
+
+    If projectPath = "" Then
+        MsgBox _
+            "Could not determine the MediaCatalog project folder.", _
+            16, _
+            "MediaCatalog"
+        Exit Sub
+    End If
+
+    settingsPath = FSO.BuildPath(projectPath, "settings.ini")
+
+    scriptPath = FSO.BuildPath( _
+        FSO.BuildPath(projectPath, "scripts"), _
+        "imdb_lookup_calc.py" _
+    )
+
+    If Not FSO.FileExists(settingsPath) Then
+        MsgBox _
+            "settings.ini was not found:" & Chr(10) & _
+            settingsPath, _
+            16, _
+            "MediaCatalog"
+        Exit Sub
+    End If
+
+    If Not FSO.FileExists(scriptPath) Then
+        MsgBox _
+            "IMDb lookup helper was not found:" & Chr(10) & _
+            scriptPath, _
+            16, _
+            "MediaCatalog"
+        Exit Sub
+    End If
+
+    pythonCommand = ReadIniValue( _
+        settingsPath, _
+        "runtime", _
+        "python", _
+        "" _
+    )
+
+    If pythonCommand = "" Then
+        MsgBox _
+            "No Python command is configured in settings.ini.", _
+            16, _
+            "MediaCatalog"
+        Exit Sub
+    End If
+
+    For rowNum = startRow To endRow
+
+        result = LookupIMDbRow( _
+            oSheet, _
+            rowNum, _
+            FSO, _
+            Session, _
+            pythonCommand, _
+            scriptPath _
+        )
+
+        Select Case result
+
+            Case "RESOLVED"
+                resolvedCount = resolvedCount + 1
+
+            Case "SKIP_BLANK"
+                blankCount = blankCount + 1
+
+            Case Else
+
+                failedCount = failedCount + 1
+
+                If Left(result, 6) = "ERROR:" Then
+                    failures = failures & _
+                        "Row " & CStr(rowNum + 1) & ": " & _
+                        Mid(result, 7) & Chr(10)
+                Else
+                    failures = failures & _
+                        "Row " & CStr(rowNum + 1) & ": " & _
+                        result & Chr(10)
+                End If
+
+        End Select
+
+    Next rowNum
+
+    summary = _
+        "IMDb lookup finished." & Chr(10) & Chr(10) & _
+        "Resolved/refreshed: " & CStr(resolvedCount) & Chr(10) & _
+        "Blank Release Title: " & CStr(blankCount) & Chr(10) & _
+        "Needs review: " & CStr(failedCount)
+
+    If failures <> "" Then
+        summary = summary & _
+            Chr(10) & Chr(10) & _
+            failures
+    End If
+
+    MsgBox _
+        summary, _
+        IIf(failedCount > 0, 48, 64), _
+        "MediaCatalog"
+
+    Exit Sub
+
+LookupError:
+
+    MsgBox _
+        "IMDb lookup failed:" & Chr(10) & _
+        Error$, _
+        16, _
+        "MediaCatalog"
+
+End Sub
