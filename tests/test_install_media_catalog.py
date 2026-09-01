@@ -29,7 +29,11 @@ def main():
         dataset = temp / "title.ratings.tsv.gz"
         with gzip.open(dataset, "wb") as output:
             output.write(b"tconst\taverageRating\tnumVotes\n")
-            output.write(b"tt0000001\t5.7\t10\n")
+            for number in range(40):
+                output.write(
+                    "tt{:07d}\t5.7\t{}\n".format(number, number + 10).encode("ascii")
+                )
+        assert dataset.stat().st_size >= 100
         assert validate_dataset(
             dataset,
             b"tconst\taverageRating\tnumVotes",
