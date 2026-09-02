@@ -14,7 +14,12 @@ def main():
 
     assert "' MediaCatalog Excel 2016 module v0.4.1" in excel
     assert "Public Sub ResolveSelectedRows()" in excel
+    assert "Public Sub ResolveSelectedUPCs()" in excel
+    assert "Public Sub ResolveSelectedUPCs()\n    ResolveSelectedRows" in excel
     assert '"Resolve Selected Rows", "ResolveSelectedRows"' in excel
+    assert "If ActiveWorkbook Is ThisWorkbook Then" not in excel
+    assert "Set ActiveCatalogSheet = ActiveSheet" in excel
+    assert 'Replace$(control.Caption, "&", "") = MENU_CAPTION' in excel
     assert '"resolve_rows.py"' in excel
     assert 'Array("Blu-ray.com Title", "Release Title"' in excel
     assert 'Array("IMDb Title", "Title")' in excel

@@ -58,6 +58,12 @@ def main():
         # The checked-in XLSX is intentionally a data-only source. install.cmd
         # uses Excel itself to create the macro-enabled root XLSM.
         assert "xl/vbaProject.bin" not in package.namelist()
+        assert not any(
+            name.startswith("xl/tables/") for name in package.namelist()
+        )
+        workbook_xml = package.read("xl/workbook.xml")
+        assert b"absPath" not in workbook_xml
+        assert b"fileRecoveryPr" not in workbook_xml
         worksheet_xml = b"\n".join(
             package.read(name)
             for name in package.namelist()
@@ -67,8 +73,25 @@ def main():
         assert b"IMDb Title" in worksheet_xml
         assert b"Release Title" not in worksheet_xml
 
-    assert (PROJECT_ROOT / "scripts" / "build_excel_template.vbs").exists()
-    assert (PROJECT_ROOT / "scripts" / "build_excel_template.ps1").exists()
+    builder_path = PROJECT_ROOT / "scripts" / "build_excel_template.vbs"
+    powershell_builder_path = (
+        PROJECT_ROOT / "scripts" / "build_excel_template.ps1"
+    )
+
+    assert builder_path.exists()
+    assert powershell_builder_path.exists()
+
+    builder_source = builder_path.read_text(encoding="utf-8")
+
+    assert "codeModule.AddFromString workbookCode" in builder_source
+    assert "codeModule.DeleteLines" not in builder_source
+    assert (
+        "OpenTextFile(workbookCodeFile, 1, False, 0)"
+        in builder_source
+    )
+    assert "excel.EnableEvents = False" in builder_source
+    assert 'WScript.Echo "Created " & outputWorkbook' not in builder_source
+
     print("PASS: ODS macro/menu package and Excel template builder contract")
 
 

@@ -20,7 +20,7 @@ If Not fso.FileExists(sourceWorkbook) Then Fail "Source workbook not found: " & 
 If Not fso.FileExists(moduleFile) Then Fail "VBA module not found: " & moduleFile
 If Not fso.FileExists(workbookCodeFile) Then Fail "ThisWorkbook code not found: " & workbookCodeFile
 
-Set textStream = fso.OpenTextFile(workbookCodeFile, 1, False, -1)
+Set textStream = fso.OpenTextFile(workbookCodeFile, 1, False, 0)
 workbookCode = textStream.ReadAll
 textStream.Close
 
@@ -31,6 +31,7 @@ On Error GoTo 0
 
 excel.Visible = False
 excel.DisplayAlerts = False
+excel.EnableEvents = False
 
 On Error Resume Next
 Set workbook = excel.Workbooks.Open(sourceWorkbook)
@@ -52,17 +53,18 @@ End If
 On Error GoTo 0
 
 Set codeModule = workbook.VBProject.VBComponents("ThisWorkbook").CodeModule
-If codeModule.CountOfLines > 0 Then
-    codeModule.DeleteLines 1, codeModule.CountOfLines
-End If
 codeModule.AddFromString workbookCode
 
 If fso.FileExists(outputWorkbook) Then fso.DeleteFile outputWorkbook, True
 workbook.SaveAs outputWorkbook, 52
-workbook.Close False
-excel.Quit
 
-WScript.Echo "Created " & outputWorkbook
+Set codeModule = Nothing
+Set component = Nothing
+workbook.Close False
+Set workbook = Nothing
+excel.Quit
+Set excel = Nothing
+
 WScript.Quit 0
 
 
