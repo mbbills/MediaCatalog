@@ -6,19 +6,31 @@ from pathlib import Path
 # directory above the scripts folder.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SETTINGS_FILE = PROJECT_ROOT / "settings.ini"
+SETTINGS_EXAMPLE_FILE = PROJECT_ROOT / "settings.example.ini"
 
 
-def load_settings():
-    """Load settings.ini from the MediaCatalog project root."""
-    if not SETTINGS_FILE.exists():
+def load_settings_files(defaults_path, settings_path=None):
+    """Load shipped defaults, then overlay any user settings that exist."""
+    defaults_path = Path(defaults_path)
+    if not defaults_path.exists():
         raise FileNotFoundError(
-            f"settings.ini was not found at: {SETTINGS_FILE}"
+            f"Default settings were not found at: {defaults_path}"
         )
 
     config = configparser.ConfigParser()
-    config.read(SETTINGS_FILE, encoding="utf-8")
+    config.read(defaults_path, encoding="utf-8")
+
+    if settings_path is not None:
+        settings_path = Path(settings_path)
+        if settings_path.exists():
+            config.read(settings_path, encoding="utf-8")
 
     return config
+
+
+def load_settings():
+    """Load shipped defaults and overlay settings.ini when present."""
+    return load_settings_files(SETTINGS_EXAMPLE_FILE, SETTINGS_FILE)
 
 
 def resolve_path(value):

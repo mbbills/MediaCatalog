@@ -6,7 +6,32 @@ import threading
 import time
 
 
-STATUSES = ("OK", "NOT_FOUND", "AMBIGUOUS", "ERROR", "CANCELLED")
+STATUSES = (
+    "OK",
+    "PARTIAL",
+    "NEEDS_REVIEW",
+    "NOT_FOUND",
+    "AMBIGUOUS",
+    "SKIPPED",
+    "ERROR",
+    "CANCELLED",
+)
+
+
+def normalize_status(status):
+    """Map detailed resolver messages to progress-summary categories."""
+    normalized = str(status or "ERROR").strip().upper()
+    if normalized.startswith("OK"):
+        return "OK"
+    if normalized.startswith("PARTIAL"):
+        return "PARTIAL"
+    if normalized.startswith("NEEDS REVIEW"):
+        return "NEEDS_REVIEW"
+    if normalized.startswith("SKIPPED"):
+        return "SKIPPED"
+    if normalized in STATUSES:
+        return normalized
+    return "ERROR"
 
 
 def format_duration(seconds):
@@ -42,9 +67,7 @@ class ProgressReporter:
             self.phase = str(phase or "")
 
     def finish_item(self, status):
-        normalized = str(status or "ERROR").upper()
-        if normalized not in self.counts:
-            normalized = "ERROR"
+        normalized = normalize_status(status)
         with self.lock:
             self.completed += 1
             self.counts[normalized] += 1
@@ -89,6 +112,7 @@ def run_with_progress(
     worker,
     enabled=True,
     always_on_top=True,
+    status_mode="lookup",
 ):
     """Run worker(reporter), showing a responsive progress/cancel window."""
     reporter = ProgressReporter(total)
@@ -177,14 +201,24 @@ def run_with_progress(
             else ""
         )
         counts = state["counts"]
-        counts_var.set(
-            "Matched {}   Not found {}   Ambiguous {}   Errors {}".format(
-                counts["OK"],
-                counts["NOT_FOUND"],
-                counts["AMBIGUOUS"],
-                counts["ERROR"],
+        if status_mode == "integrated":
+            counts_var.set(
+                "Complete {}   Partial {}   Review {}   Errors {}".format(
+                    counts["OK"],
+                    counts["PARTIAL"],
+                    counts["NEEDS_REVIEW"],
+                    counts["ERROR"],
+                )
             )
-        )
+        else:
+            counts_var.set(
+                "Matched {}   Not found {}   Ambiguous {}   Errors {}".format(
+                    counts["OK"],
+                    counts["NOT_FOUND"],
+                    counts["AMBIGUOUS"],
+                    counts["ERROR"],
+                )
+            )
 
         elapsed = state["elapsed"]
         timing = "Elapsed {}".format(format_duration(elapsed))

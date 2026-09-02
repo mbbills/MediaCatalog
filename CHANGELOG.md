@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- Fixed the Windows installer path passed to the Excel template builder when
+  the project folder contains spaces or the batch-file directory ends in a
+  quoted backslash.
+- Repaired the checked-in Excel source template, removed its invalid table and
+  repair metadata, and hardened the builder for Excel 2016 COM cleanup.
+- Made older partial `settings.ini` files inherit newly shipped defaults, so a
+  preserved Python path does not hide later IMDb dataset settings.
+- Corrected the integrated resolver's progress counts for complete, partial,
+  and needs-review results.
+- Made the legacy Excel `ResolveSelectedUPCs` entry point run the integrated
+  workflow, matching Calc, and remove stale Media Catalog menus by caption.
+- Made an Excel-template build failure return installer failure instead of
+  continuing to a misleading `Installation complete` message.
+
 ## v0.4.1
 
 - Renamed the standard column C header from **Release Title** to

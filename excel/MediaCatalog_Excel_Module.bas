@@ -71,13 +71,18 @@ End Sub
 Public Sub RemoveMediaCatalogMenu()
     Dim menuBar As Object
     Dim control As Object
+    Dim controlIndex As Long
 
     On Error Resume Next
     Set menuBar = Application.CommandBars("Worksheet Menu Bar")
 
-    For Each control In menuBar.Controls
-        If control.Tag = MENU_TAG Then control.Delete
-    Next control
+    For controlIndex = menuBar.Controls.Count To 1 Step -1
+        Set control = menuBar.Controls(controlIndex)
+        If control.Tag = MENU_TAG Or _
+                Replace$(control.Caption, "&", "") = MENU_CAPTION Then
+            control.Delete
+        End If
+    Next controlIndex
 
     On Error GoTo 0
 End Sub
@@ -802,7 +807,7 @@ End Sub
 ' ============================================================================
 
 Public Sub ResolveSelectedUPCs()
-    ResolveSelectedUPCsWithBRdC
+    ResolveSelectedRows
 End Sub
 
 

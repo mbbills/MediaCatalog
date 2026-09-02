@@ -92,6 +92,7 @@ if errorlevel 1 (
     echo.
     echo The data installation succeeded, but the Excel template was not built.
     echo See README.md for the manual Excel module-import procedure.
+    goto failed
 )
 
 :finish

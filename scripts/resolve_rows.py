@@ -438,6 +438,7 @@ def main():
             lambda progress: process_rows(rows, timeout, delay, progress),
             enabled=show_progress,
             always_on_top=always_on_top,
+            status_mode="integrated",
         )
         write_output(output_path, results)
     except Exception:
