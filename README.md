@@ -21,10 +21,10 @@ identity:
 |---|---|
 | A | UPC |
 | B | Blu-ray.com URL |
-| C | Release Title |
+| C | Blu-ray.com Title |
 | D | IMDb URL |
 | E | IMDb ID |
-| F | Title |
+| F | IMDb Title |
 | G | Year |
 | H | Runtime |
 | I | Title Type |
@@ -43,6 +43,24 @@ identity:
 
 The macros locate columns by their row-1 labels, but A through U is the
 supported standard layout.
+
+## Compatibility and minimum requirements
+
+The older platforms listed for MediaCatalog are minimum compatibility targets,
+not recommendations. Most users will likely run it on Windows 10 or Windows 11,
+or with a current LibreOffice release on Linux distributions such as Debian.
+
+The compatibility floor is:
+
+- Windows 7 with Excel 2016 for the Excel workflow;
+- a reasonably current LibreOffice Calc release for the Calc workflow; and
+- Python 3.8 or newer.
+
+On Windows 7, Python 3.8.10 is the final official Python release with a Windows
+7 installer. On Windows 10, Windows 11, Debian, and other current systems, use a
+newer supported Python release when one is already installed or readily
+available. MediaCatalog checks for Python 3.8 or newer and does not require
+Python to be held back to version 3.8.
 
 ## Quick installation on Windows
 
@@ -170,6 +188,26 @@ values.
 A title or IMDb ID identifies content, not a particular disc release.
 MediaCatalog therefore does not guess a physical edition when only IMDb or
 title information is supplied.
+
+## Scanning barcodes with a phone
+
+A convenient way to collect a batch of UPCs is a phone application such as
+**Barcode to PC**. One practical workflow is:
+
+1. Start a scan session in the phone app and scan the disc-case barcodes.
+2. Open the completed scan session, choose **Share**, and select **Export as
+   CSV**.
+3. Transfer the CSV file to the computer running MediaCatalog.
+4. Open the CSV in a plain-text editor rather than importing it directly into
+   the spreadsheet.
+5. In the MediaCatalog workbook, format the **UPC** column as **Text**.
+6. Copy the UPC values from the CSV and paste them into the UPC column.
+7. Select the populated rows and run **Media Catalog → Resolve Selected Rows**.
+
+UPCs are identifiers, not quantities. Do not paste or import them into cells
+formatted as **General** or **Number**: spreadsheet software may remove leading
+zeroes or display long UPCs in scientific notation. Formatting the destination
+column as **Text before pasting** preserves the barcode exactly as scanned.
 
 ## Retained individual tools
 
