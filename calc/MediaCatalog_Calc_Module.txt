@@ -1,14 +1,14 @@
 Option Explicit
 
-' MediaCatalog LibreOffice Calc module v0.4.0
+' MediaCatalog LibreOffice Calc module v0.4.1
 '
 ' Columns:
 '   A  UPC
 '   B  Blu-ray.com URL
-'   C  Release Title
+'   C  Blu-ray.com Title
 '   D  IMDb URL
 '   E  IMDb ID
-'   F  Title
+'   F  IMDb Title
 '   G  Year
 '   H  Runtime
 '   I  Title Type
@@ -309,10 +309,10 @@ Sub ResolveSelectedRows()
     Set oSheet = oSelection.Spreadsheet
     upcColumn = FindCalcHeaderColumn(oSheet, Array("UPC", "UPC Code", "Barcode"))
     blurayUrlColumn = FindCalcHeaderColumn(oSheet, Array("Blu-ray.com URL", "Blu-ray URL", "Release URL"))
-    releaseTitleColumn = FindCalcHeaderColumn(oSheet, Array("Release Title", "Blu-ray.com Title", "DVD Title"))
+    releaseTitleColumn = FindCalcHeaderColumn(oSheet, Array("Blu-ray.com Title", "Release Title", "DVD Title"))
     imdbUrlColumn = FindCalcHeaderColumn(oSheet, Array("IMDb URL"))
     imdbIdColumn = FindCalcHeaderColumn(oSheet, Array("IMDb ID"))
-    titleColumn = FindCalcHeaderColumn(oSheet, Array("Title", "IMDb Title"))
+    titleColumn = FindCalcHeaderColumn(oSheet, Array("IMDb Title", "Title"))
     yearColumn = FindCalcHeaderColumn(oSheet, Array("Year", "IMDb Year"))
     runtimeColumn = FindCalcHeaderColumn(oSheet, Array("Runtime", "IMDb Runtime"))
     titleTypeColumn = FindCalcHeaderColumn(oSheet, Array("Title Type", "IMDb Title Type"))
@@ -763,7 +763,7 @@ Sub ResolveSelectedUPCsByProvider( _
         oSheet, Array("Blu-ray.com URL", "Blu-ray URL", "Release URL") _
     )
     titleColumn = FindCalcHeaderColumn( _
-        oSheet, Array("Release Title", "Blu-ray.com Title", "DVD Title", "UPCItemDB Name") _
+        oSheet, Array("Blu-ray.com Title", "Release Title", "DVD Title", "UPCItemDB Name") _
     )
     statusColumn = FindCalcHeaderColumn( _
         oSheet, Array("Status / Error", "Status", "Error") _
@@ -771,7 +771,7 @@ Sub ResolveSelectedUPCsByProvider( _
 
     If upcColumn < 0 Or titleColumn < 0 Or statusColumn < 0 Then
         MsgBox _
-            "The UPC, Release Title, and Status / Error columns are required.", _
+            "The UPC, Blu-ray.com Title, and Status / Error columns are required.", _
             16, _
             "MediaCatalog"
         Exit Sub
@@ -1053,12 +1053,12 @@ Sub ResolveSelectedUPCsLegacy()
     Set oSheet = oSelection.Spreadsheet
     upcColumn = FindCalcHeaderColumn(oSheet, Array("UPC", "UPC Code", "Barcode"))
     titleColumn = FindCalcHeaderColumn( _
-        oSheet, Array("Release Title", "Blu-ray.com Title", "DVD Title", "UPCItemDB Name") _
+        oSheet, Array("Blu-ray.com Title", "Release Title", "DVD Title", "UPCItemDB Name") _
     )
 
     If upcColumn < 0 Or titleColumn < 0 Then
         MsgBox _
-            "The UPC and Release Title columns are required.", _
+            "The UPC and Blu-ray.com Title columns are required.", _
             16, _
             "MediaCatalog"
         Exit Sub
@@ -1719,7 +1719,7 @@ End Sub
 
 
 ' ============================================================================
-' Release Title / IMDb ID -> IMDb metadata
+' Blu-ray.com Title / IMDb ID -> IMDb metadata
 ' ============================================================================
 
 Function LookupIMDbRow( _
@@ -1761,11 +1761,11 @@ Function LookupIMDbRow( _
     LookupIMDbRow = "ERROR:Unknown IMDb lookup error"
 
     releaseTitleColumn = FindCalcHeaderColumn( _
-        oSheet, Array("Release Title", "Blu-ray.com Title", "DVD Title", "UPCItemDB Name") _
+        oSheet, Array("Blu-ray.com Title", "Release Title", "DVD Title", "UPCItemDB Name") _
     )
     imdbUrlColumn = FindCalcHeaderColumn(oSheet, Array("IMDb URL"))
     imdbIdColumn = FindCalcHeaderColumn(oSheet, Array("IMDb ID"))
-    imdbTitleColumn = FindCalcHeaderColumn(oSheet, Array("Title", "IMDb Title"))
+    imdbTitleColumn = FindCalcHeaderColumn(oSheet, Array("IMDb Title", "Title"))
     imdbYearColumn = FindCalcHeaderColumn(oSheet, Array("Year", "IMDb Year"))
     imdbRuntimeColumn = FindCalcHeaderColumn(oSheet, Array("Runtime", "IMDb Runtime"))
     imdbTitleTypeColumn = FindCalcHeaderColumn(oSheet, Array("Title Type", "IMDb Title Type"))
@@ -2122,7 +2122,7 @@ Sub LookupIMDbForCurrentRow()
     summary = _
         "IMDb lookup finished." & Chr(10) & Chr(10) & _
         "Resolved/refreshed: " & CStr(resolvedCount) & Chr(10) & _
-        "Blank Release Title: " & CStr(blankCount) & Chr(10) & _
+        "Blank Blu-ray.com Title: " & CStr(blankCount) & Chr(10) & _
         "Needs review: " & CStr(failedCount)
 
     If failures <> "" Then
@@ -2288,4 +2288,3 @@ Sub CheckMediaCatalogConfiguration()
         "MediaCatalog"
 
 End Sub
-

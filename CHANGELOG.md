@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.4.1
+
+- Renamed the standard column C header from **Release Title** to
+  **Blu-ray.com Title** so the physical-release title's source is explicit.
+- Renamed the standard column F header from **Title** to **IMDb Title** so it is
+  clearly distinguished from the Blu-ray.com product title.
+- Updated the Calc ODS template, Excel XLSX source template, embedded Calc
+  module, standalone Excel and Calc modules, header files, installer identity,
+  tests, and documentation to use the new canonical names.
+- Retained **Release Title** and **Title** as legacy header aliases so existing
+  v0.4.0 and earlier catalogs continue to work without renaming their columns.
+
 ## v0.4.0
 
 - Added **Resolve Selected Rows**, a single Excel/Calc workflow that can begin

@@ -1,1 +1,1 @@
-UPC	Blu-ray.com URL	Release Title	IMDb URL	IMDb ID	Title	Year	Runtime	Title Type	Season	Status / Error	Studio	Blu-ray Year	Blu-ray Runtime	Content Rating	Physical Release Date	Disc Format	Video Codec	Resolution	Aspect Ratio	Disc Count / Capacities
+UPC	Blu-ray.com URL	Blu-ray.com Title	IMDb URL	IMDb ID	IMDb Title	Year	Runtime	Title Type	Season	Status / Error	Studio	Blu-ray Year	Blu-ray Runtime	Content Rating	Physical Release Date	Disc Format	Video Codec	Resolution	Aspect Ratio	Disc Count / Capacities

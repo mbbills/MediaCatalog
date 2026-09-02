@@ -1,4 +1,4 @@
-# MediaCatalog portable v0.4.0
+# MediaCatalog portable v0.4.1
 
 MediaCatalog is a local physical-media catalog workflow for Excel 2016 and
 LibreOffice Calc. One integrated command can begin with a UPC/EAN, an exact
@@ -159,7 +159,7 @@ The resolver processes each row according to the strongest available input:
 | UPC only | UPC → Blu-ray.com release → disc details and structured IMDb link → local IMDb metadata |
 | Blu-ray.com URL only | Exact release page → disc details and structured IMDb link → local IMDb metadata |
 | IMDb ID or URL only | Exact local IMDb lookup |
-| Title only | Local IMDb title matcher; physical-release fields remain unresolved |
+| IMDb Title only | Local IMDb title matcher; physical-release fields remain unresolved |
 | UPC plus IMDb ID | UPC supplies physical-release data; the entered IMDb ID supplies canonical content data |
 | Blu-ray.com URL plus UPC | The supplied release URL is authoritative |
 
@@ -180,14 +180,14 @@ entered ID and records a warning such as:
 OK - Blu-ray + IMDb; Manual IMDb override; Blu-ray.com links tt1234567
 ```
 
-IMDb-derived Title, Year, Runtime, Title Type, and Season are refreshed from
-the winning IMDb ID. Existing physical-detail cells are filled only when blank,
-preserving manually reviewed Studio, release date, format, codec, and related
-values.
+IMDb-derived fields—IMDb Title, Year, Runtime, Title Type, and Season—are
+refreshed from the winning IMDb ID. Existing physical-detail cells are filled
+only when blank, preserving manually reviewed Studio, release date, format,
+codec, and related values.
 
 A title or IMDb ID identifies content, not a particular disc release.
-MediaCatalog therefore does not guess a physical edition when only IMDb or
-title information is supplied.
+MediaCatalog therefore does not guess a physical edition when only an IMDb
+ID/URL or IMDb Title is supplied.
 
 ## Scanning barcodes with a phone
 
@@ -235,8 +235,9 @@ elapsed time, estimated time remaining, and a **Cancel** button. Completed rows
 are returned even when the remainder is cancelled.
 
 The configured Blu-ray.com delay is applied between selected rows that actually
-used the network, not before the first row. Title-only and IMDb-ID-only rows use
-the local SQLite database and do not initialize a Blu-ray.com session.
+used the network, not before the first row. Rows containing only an IMDb Title
+or IMDb ID use the local SQLite database and do not initialize a Blu-ray.com
+session.
 
 Do not click or edit the workbook while a desktop macro is writing its results.
 Use the progress window's Cancel button instead.
@@ -259,7 +260,7 @@ python scripts\build_imdb_database.py --force
 
 The builder writes a temporary `.building` database and replaces the live
 database only after a complete successful import. Databases from v0.2.4 and
-later remain compatible with v0.4.0.
+later remain compatible with v0.4.1.
 
 ## Configuration
 
