@@ -13,6 +13,8 @@ from install_media_catalog import update_runtime_python, validate_dataset
 
 def main():
     with tempfile.TemporaryDirectory() as temp_dir:
+        install_cmd = (PROJECT_ROOT / "install.cmd").read_text(encoding="utf-8")
+        assert '-ProjectRoot "%~dp0."' in install_cmd
         temp = Path(temp_dir)
         settings = temp / "settings.ini"
         settings.write_text(

@@ -403,11 +403,6 @@ Private Function ActiveCatalogSheet(ByRef errorText As String) As Worksheet
         Exit Function
     End If
 
-    If ActiveWorkbook Is ThisWorkbook Then
-        errorText = "Activate the catalog workbook before running this command."
-        Exit Function
-    End If
-
     If Not TypeOf ActiveSheet Is Worksheet Then
         errorText = "Activate a worksheet first."
         Exit Function

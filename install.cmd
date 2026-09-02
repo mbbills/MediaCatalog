@@ -87,7 +87,7 @@ echo for this operation and restores the previous setting afterward.
 echo.
 choice /C YN /N /M "Build MediaCatalog_template.xlsm now? [Y/N] "
 if errorlevel 2 goto finish
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\build_excel_template.ps1" -ProjectRoot "%~dp0"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\build_excel_template.ps1" -ProjectRoot "%~dp0."
 if errorlevel 1 (
     echo.
     echo The data installation succeeded, but the Excel template was not built.

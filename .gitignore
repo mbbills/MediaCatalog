@@ -22,3 +22,4 @@ logs/*
 !logs/README.txt
 ~$*.xlsx
 ~$*.xlsm
+*.bak
