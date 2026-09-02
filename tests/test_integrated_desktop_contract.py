@@ -12,13 +12,17 @@ def main():
         PROJECT_ROOT / "calc" / "MediaCatalog_Calc_Module.txt"
     ).read_text(encoding="utf-8")
 
-    assert "' MediaCatalog Excel 2016 module v0.4.0" in excel
+    assert "' MediaCatalog Excel 2016 module v0.4.1" in excel
     assert "Public Sub ResolveSelectedRows()" in excel
     assert '"Resolve Selected Rows", "ResolveSelectedRows"' in excel
     assert '"resolve_rows.py"' in excel
-    assert "' MediaCatalog LibreOffice Calc module v0.4.0" in calc
+    assert 'Array("Blu-ray.com Title", "Release Title"' in excel
+    assert 'Array("IMDb Title", "Title")' in excel
+    assert "' MediaCatalog LibreOffice Calc module v0.4.1" in calc
     assert "Sub ResolveSelectedRows()" in calc
     assert '"resolve_rows.py"' in calc
+    assert 'Array("Blu-ray.com Title", "Release Title"' in calc
+    assert 'Array("IMDb Title", "Title")' in calc
     assert "Sub RemoveSelectedUPCERows()" in calc
     assert "Sub OpenSelectedUPCOnBluRay()" in calc
     assert "Sub CheckMediaCatalogConfiguration()" in calc

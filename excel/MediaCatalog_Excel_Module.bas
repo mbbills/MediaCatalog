@@ -1,15 +1,15 @@
 Attribute VB_Name = "MediaCatalogExcel"
 Option Explicit
 
-' MediaCatalog Excel 2016 module v0.4.0
+' MediaCatalog Excel 2016 module v0.4.1
 '
 ' Standard columns:
 '   A  UPC
 '   B  Blu-ray.com URL
-'   C  Release Title
+'   C  Blu-ray.com Title
 '   D  IMDb URL
 '   E  IMDb ID
-'   F  Title
+'   F  IMDb Title
 '   G  Year
 '   H  Runtime
 '   I  Title Type
@@ -616,10 +616,10 @@ Public Sub ResolveSelectedRows()
 
     upcColumn = FindHeaderColumn(sheet, Array("UPC", "UPC Code", "Barcode"))
     blurayUrlColumn = FindHeaderColumn(sheet, Array("Blu-ray.com URL", "Blu-ray URL", "Release URL"))
-    releaseTitleColumn = FindHeaderColumn(sheet, Array("Release Title", "Blu-ray.com Title", "DVD Title"))
+    releaseTitleColumn = FindHeaderColumn(sheet, Array("Blu-ray.com Title", "Release Title", "DVD Title"))
     imdbUrlColumn = FindHeaderColumn(sheet, Array("IMDb URL"))
     imdbIdColumn = FindHeaderColumn(sheet, Array("IMDb ID"))
-    titleColumn = FindHeaderColumn(sheet, Array("Title", "IMDb Title"))
+    titleColumn = FindHeaderColumn(sheet, Array("IMDb Title", "Title"))
     yearColumn = FindHeaderColumn(sheet, Array("Year", "IMDb Year"))
     runtimeColumn = FindHeaderColumn(sheet, Array("Runtime", "IMDb Runtime"))
     titleTypeColumn = FindHeaderColumn(sheet, Array("Title Type", "IMDb Title Type"))
@@ -942,7 +942,7 @@ Private Sub ResolveSelectedUPCsByProvider( _
     If Len(errorText) > 0 Then GoTo ShowError
 
     upcColumn = FindHeaderColumn(sheet, Array("UPC", "UPC Code", "Barcode", "Barcode Value", "text"))
-    titleColumn = FindHeaderColumn(sheet, Array("Release Title", "Blu-ray.com Title", "DVD Title", "UPCItemDB Name"))
+    titleColumn = FindHeaderColumn(sheet, Array("Blu-ray.com Title", "Release Title", "DVD Title", "UPCItemDB Name"))
     urlColumn = FindHeaderColumn(sheet, Array("Blu-ray.com URL", "Blu-ray URL", "Release URL"))
     statusColumn = FindHeaderColumn(sheet, Array("Status / Error", "Status", "Error"))
     typeColumn = FindHeaderColumn(sheet, Array("format", "Barcode Type", "Symbology", "Type"))
@@ -953,7 +953,7 @@ Private Sub ResolveSelectedUPCsByProvider( _
     End If
 
     If titleColumn = 0 Then
-        errorText = "No Release Title column was found in row 1."
+        errorText = "No Blu-ray.com Title column was found in row 1."
         GoTo ShowError
     End If
 
@@ -1175,7 +1175,7 @@ Public Sub EnrichSelectedBluRayDetails()
     If Len(errorText) > 0 Then GoTo ShowError
 
     upcColumn = FindHeaderColumn(sheet, Array("UPC", "UPC Code", "Barcode", "Barcode Value", "text"))
-    titleColumn = FindHeaderColumn(sheet, Array("Release Title", "Blu-ray.com Title", "DVD Title", "UPCItemDB Name"))
+    titleColumn = FindHeaderColumn(sheet, Array("Blu-ray.com Title", "Release Title", "DVD Title", "UPCItemDB Name"))
     urlColumn = FindHeaderColumn(sheet, Array("Blu-ray.com URL", "Blu-ray URL", "Release URL"))
     statusColumn = FindHeaderColumn(sheet, Array("Status / Error", "Status", "Error"))
     studioColumn = FindHeaderColumn(sheet, Array("Studio", "Blu-ray Studio"))
@@ -1198,7 +1198,7 @@ Public Sub EnrichSelectedBluRayDetails()
        ratingColumn = 0 Or releaseDateColumn = 0 Or discFormatColumn = 0 Or _
        videoCodecColumn = 0 Or resolutionColumn = 0 Or aspectRatioColumn = 0 Or _
        discCountColumn = 0 Then
-        errorText = "One or more Blu-ray detail columns are missing. Paste the v0.3.0 headers into row 1 or use the supplied template."
+        errorText = "One or more Blu-ray detail columns are missing. Paste the v0.4.1 headers into row 1 or use the supplied template."
         GoTo ShowError
     End If
 
@@ -1380,11 +1380,11 @@ Public Sub LookupIMDbForCurrentRow()
     rows = SelectedRows(errorText)
     If Len(errorText) > 0 Then GoTo ShowError
 
-    titleColumn = FindHeaderColumn(sheet, Array("Release Title", "Blu-ray.com Title", "DVD Title", "UPCItemDB Name"))
+    titleColumn = FindHeaderColumn(sheet, Array("Blu-ray.com Title", "Release Title", "DVD Title", "UPCItemDB Name"))
     statusColumn = FindHeaderColumn(sheet, Array("Status / Error", "Status", "Error"))
     imdbUrlColumn = FindHeaderColumn(sheet, Array("IMDb URL"))
     imdbIdColumn = FindHeaderColumn(sheet, Array("IMDb ID"))
-    imdbTitleColumn = FindHeaderColumn(sheet, Array("Title", "IMDb Title"))
+    imdbTitleColumn = FindHeaderColumn(sheet, Array("IMDb Title", "Title"))
     imdbYearColumn = FindHeaderColumn(sheet, Array("Year", "IMDb Year"))
     imdbRuntimeColumn = FindHeaderColumn(sheet, Array("Runtime", "IMDb Runtime"))
     imdbTitleTypeColumn = FindHeaderColumn(sheet, Array("Title Type", "IMDb Title Type"))

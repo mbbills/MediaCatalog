@@ -28,13 +28,26 @@ def main():
             == b"application/vnd.oasis.opendocument.spreadsheet"
         )
 
-        ElementTree.fromstring(package.read("content.xml"))
+        content = package.read("content.xml")
+        ElementTree.fromstring(content)
         ElementTree.fromstring(package.read("META-INF/manifest.xml"))
         macro = package.read("Basic/Standard/MediaCatalog.xml").decode("utf-8")
         menu = package.read(
             "Configurations2/menubar/menubar.xml"
         ).decode("utf-8")
+        assert b">Blu-ray.com Title<" in content
+        assert b">IMDb Title<" in content
+        assert b">Release Title<" not in content
+        assert b">Title<" not in content
+        assert "MediaCatalog LibreOffice Calc module v0.4.1" in macro
+        embedded_source = macro.split("<![CDATA[", 1)[1].rsplit("]]>", 1)[0]
+        standalone_source = (
+            PROJECT_ROOT / "calc" / "MediaCatalog_Calc_Module.txt"
+        ).read_text(encoding="utf-8")
+        assert embedded_source == standalone_source
         assert "Sub ResolveSelectedRows()" in macro
+        assert 'Array("Blu-ray.com Title", "Release Title"' in macro
+        assert 'Array("IMDb Title", "Title")' in macro
         assert "Media Catalog" in menu
         assert "ResolveSelectedRows?language=Basic" in menu
         assert "CheckMediaCatalogConfiguration?language=Basic" in menu
@@ -45,6 +58,14 @@ def main():
         # The checked-in XLSX is intentionally a data-only source. install.cmd
         # uses Excel itself to create the macro-enabled root XLSM.
         assert "xl/vbaProject.bin" not in package.namelist()
+        worksheet_xml = b"\n".join(
+            package.read(name)
+            for name in package.namelist()
+            if name.startswith("xl/") and name.endswith(".xml")
+        )
+        assert b"Blu-ray.com Title" in worksheet_xml
+        assert b"IMDb Title" in worksheet_xml
+        assert b"Release Title" not in worksheet_xml
 
     assert (PROJECT_ROOT / "scripts" / "build_excel_template.vbs").exists()
     assert (PROJECT_ROOT / "scripts" / "build_excel_template.ps1").exists()

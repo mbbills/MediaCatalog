@@ -23,7 +23,7 @@ DATASETS = {
     "title.episode.tsv.gz": b"tconst\tparentTconst\tseasonNumber",
     "title.ratings.tsv.gz": b"tconst\taverageRating\tnumVotes",
 }
-USER_AGENT = "MediaCatalog installer/0.4.0"
+USER_AGENT = "MediaCatalog installer/0.4.1"
 
 
 def update_runtime_python(settings_path, executable):
