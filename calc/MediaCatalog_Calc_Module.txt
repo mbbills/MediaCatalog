@@ -381,8 +381,21 @@ Sub ResolveSelectedRows()
     )
 
     For i = oSelection.RangeAddress.StartRow To oSelection.RangeAddress.EndRow
-        If barcodeTypeColumn >= 0 And _
-           NormalizeCalcHeader(oSheet.getCellByPosition(barcodeTypeColumn, i).String) = "upce" Then
+        ' Basic's "And" does not short-circuit: evaluating the second
+        ' operand when barcodeTypeColumn is -1 (no recognized barcode-type
+        ' header on this sheet) calls getCellByPosition(-1, i), which
+        ' raises IndexOutOfBoundsException. Nest the checks instead.
+        Dim isUPCERow As Boolean
+        isUPCERow = False
+        If barcodeTypeColumn >= 0 Then
+            isUPCERow = ( _
+                NormalizeCalcHeader( _
+                    oSheet.getCellByPosition(barcodeTypeColumn, i).String _
+                ) = "upce" _
+            )
+        End If
+
+        If isUPCERow Then
             skippedUPCE = skippedUPCE + 1
             oSheet.getCellByPosition(statusColumn, i).String = "UPC_E skipped"
         Else
