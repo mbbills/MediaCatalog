@@ -212,7 +212,10 @@ Sub SetCalcCellHyperlink( _
     )
     oField.URL = address
     oField.Representation = displayText
-    oText.insertTextContent(oText.End, oField, False)
+    ' oText.End raises IndexOutOfBoundsException on some LibreOffice builds
+    ' (reproduced on 25.2.7.2) when the cell text is empty; a fresh cursor
+    ' is the compatible insertion point.
+    oText.insertTextContent(oText.createTextCursor(), oField, False)
 
 End Sub
 
@@ -530,6 +533,10 @@ IntegratedSummary:
 
 IntegratedCleanup:
     On Error Resume Next
+    ' Close any handle left open by an error that skipped the normal
+    ' CloseFile call, so DeleteFile below never fights a locked file.
+    If Not IsNull(inputFile) Then inputFile.CloseFile()
+    If Not IsNull(outputFile) Then outputFile.CloseFile()
     If inputPath <> "" Then
         If FSO.FileExists(inputPath) Then FSO.DeleteFile(inputPath)
     End If
@@ -991,6 +998,8 @@ ShowSummary:
 Cleanup:
 
     On Error Resume Next
+    If Not IsNull(inputFile) Then inputFile.CloseFile()
+    If Not IsNull(outputFile) Then outputFile.CloseFile()
     If inputPath <> "" Then
         If FSO.FileExists(inputPath) Then FSO.DeleteFile(inputPath)
     End If
@@ -1701,6 +1710,8 @@ EnrichmentSummary:
 EnrichmentCleanup:
 
     On Error Resume Next
+    If Not IsNull(inputFile) Then inputFile.CloseFile()
+    If Not IsNull(outputFile) Then outputFile.CloseFile()
     If inputPath <> "" Then
         If FSO.FileExists(inputPath) Then FSO.DeleteFile(inputPath)
     End If
@@ -1927,6 +1938,9 @@ Function LookupIMDbRow( _
 Cleanup:
 
     On Error Resume Next
+
+    If Not IsNull(inputFile) Then inputFile.CloseFile()
+    If Not IsNull(outputFile) Then outputFile.CloseFile()
 
     If inputPath <> "" Then
         If FSO.FileExists(inputPath) Then
