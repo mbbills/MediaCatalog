@@ -345,7 +345,7 @@ Sub ResolveSelectedRows()
        releaseDateColumn < 0 Or discFormatColumn < 0 Or codecColumn < 0 Or _
        resolutionColumn < 0 Or aspectColumn < 0 Or discCountColumn < 0 Then
         MsgBox _
-            "The integrated resolver requires the standard MediaCatalog columns A through U.", _
+            "The integrated resolver requires the standard MediaCatalog columns B through V.", _
             16, _
             "MediaCatalog"
         Exit Sub

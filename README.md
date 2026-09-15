@@ -19,30 +19,38 @@ identity:
 
 | Column | Field |
 |---|---|
-| A | UPC |
-| B | Blu-ray.com URL |
-| C | Blu-ray.com Title |
-| D | IMDb URL |
-| E | IMDb ID |
-| F | IMDb Title |
-| G | Year |
-| H | Runtime |
-| I | Title Type |
-| J | Season |
-| K | Status / Error |
-| L | Studio |
-| M | Blu-ray Year |
-| N | Blu-ray Runtime |
-| O | Content Rating |
-| P | Physical Release Date |
-| Q | Disc Format |
-| R | Video Codec |
-| S | Resolution |
-| T | Aspect Ratio |
-| U | Disc Count / Capacities |
+| A | Inventory Number |
+| B | UPC |
+| C | Blu-ray.com URL |
+| D | Blu-ray.com Title |
+| E | IMDb URL |
+| F | IMDb ID |
+| G | IMDb Title |
+| H | Year |
+| I | Runtime |
+| J | Title Type |
+| K | Season |
+| L | Status / Error |
+| M | Studio |
+| N | Blu-ray Year |
+| O | Blu-ray Runtime |
+| P | Content Rating |
+| Q | Physical Release Date |
+| R | Disc Format |
+| S | Video Codec |
+| T | Resolution |
+| U | Aspect Ratio |
+| V | Disc Count / Capacities |
 
-The macros locate columns by their row-1 labels, but A through U is the
-supported standard layout.
+The macros locate columns by their row-1 labels, but B through V is the
+supported standard layout for the columns the resolver reads and writes.
+Inventory Number (column A) is a manual inventory/location identifier --
+the user's own designator for a physical copy, e.g. `BR37` -- and is not
+read or written by any resolver command, so its column position is not
+significant and no macro currently looks it up by header text. `Spine Tag`
+is an older name for the same column; a catalog that already uses that
+header can keep it as-is, since nothing in MediaCatalog reads this column
+by name today.
 
 ## Compatibility and minimum requirements
 

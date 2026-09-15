@@ -15,7 +15,7 @@ calc = (ROOT / "calc" / "MediaCatalog_Calc_Module.txt").read_text(
 assert calc.splitlines()[2] == "' MediaCatalog LibreOffice Calc module v0.4.1"
 
 headers = (
-    "UPC\tBlu-ray.com URL\tBlu-ray.com Title\tIMDb URL\tIMDb ID\tIMDb Title\t"
+    "Inventory Number\tUPC\tBlu-ray.com URL\tBlu-ray.com Title\tIMDb URL\tIMDb ID\tIMDb Title\t"
     "Year\tRuntime\tTitle Type\tSeason\tStatus / Error\tStudio\tBlu-ray Year\t"
     "Blu-ray Runtime\tContent Rating\tPhysical Release Date\tDisc Format\t"
     "Video Codec\tResolution\tAspect Ratio\tDisc Count / Capacities"

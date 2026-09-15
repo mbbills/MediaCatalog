@@ -665,7 +665,7 @@ Public Sub ResolveSelectedRows()
        blurayYearColumn = 0 Or blurayRuntimeColumn = 0 Or ratingColumn = 0 Or _
        releaseDateColumn = 0 Or discFormatColumn = 0 Or codecColumn = 0 Or _
        resolutionColumn = 0 Or aspectColumn = 0 Or discCountColumn = 0 Then
-        errorText = "The integrated resolver requires the standard MediaCatalog columns A through U."
+        errorText = "The integrated resolver requires the standard MediaCatalog columns B through V."
         GoTo ShowError
     End If
 

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added an `Inventory Number` column (new column A in both templates) as the
+  user's manual physical-copy/location identifier, e.g. `BR37`. `Spine Tag`
+  is an older name for the same concept; existing catalogs that already use
+  that header are unaffected, since no macro reads this column by name.
 - Fixed the Windows installer path passed to the Excel template builder when
   the project folder contains spaces or the batch-file directory ends in a
   quoted backslash.
