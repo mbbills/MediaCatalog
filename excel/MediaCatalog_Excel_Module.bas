@@ -331,6 +331,9 @@ Private Sub SetCellHyperlink( _
     targetCell.Hyperlinks.Delete
     On Error GoTo 0
 
+    ' A release/work title that happens to be all digits (e.g. "1917")
+    ' must not be reinterpreted as a number.
+    targetCell.NumberFormat = "@"
     targetCell.Value = displayText
 
     If Len(Trim$(address)) > 0 Then
@@ -339,6 +342,17 @@ Private Sub SetCellHyperlink( _
             Address:=address, _
             TextToDisplay:=displayText
     End If
+End Sub
+
+
+' Every MediaCatalog field is meant to be plain text, including ones that
+' look numeric (Year, Runtime, Season, a title like "1917"): Excel's
+' default Range.Value setter reinterprets a numeric-looking string as a
+' number, which then sorts/formats/exports differently from the rest of
+' the sheet. Forcing the cell to Text format before assigning keeps it text.
+Private Sub WriteTextValue(ByVal targetCell As Range, ByVal value As String)
+    targetCell.NumberFormat = "@"
+    targetCell.Value = value
 End Sub
 
 
@@ -370,14 +384,20 @@ End Function
 
 Private Sub WriteTextIfBlank(ByVal targetCell As Range, ByVal value As String)
     If Len(Trim$(CStr(targetCell.Value2))) = 0 And Len(Trim$(value)) > 0 Then
+        targetCell.NumberFormat = "@"
         targetCell.Value = value
     End If
 End Sub
 
 
 Private Sub WriteNumberIfBlank(ByVal targetCell As Range, ByVal value As String)
+    ' Despite the name (kept for the IsNumeric sanity check on the parsed
+    ' value), this stores the figure as text like every other field rather
+    ' than as a native number Excel could reformat, sum, or otherwise treat
+    ' differently from the rest of the sheet.
     If Len(Trim$(CStr(targetCell.Value2))) = 0 And IsNumeric(value) Then
-        targetCell.Value = CDbl(value)
+        targetCell.NumberFormat = "@"
+        targetCell.Value = value
     End If
 End Sub
 
@@ -605,6 +625,7 @@ Public Sub ResolveSelectedRows()
     Dim cancelled As Long
     Dim skipped As Long
     Dim failed As Long
+    Dim runFailureText As String
 
     On Error GoTo FatalError
 
@@ -706,12 +727,24 @@ Public Sub ResolveSelectedRows()
                   QuoteArgument(inputPath) & " " & QuoteArgument(outputPath)
 
     exitCode = RunCommandAndWait(commandLine, 43200, standardOutput, standardError)
-    If exitCode <> 0 Or Not FileExists(outputPath) Then
+    If Not FileExists(outputPath) Then
         errorText = "Integrated resolver failed."
         If Len(Trim$(standardError)) > 0 Then
             errorText = errorText & vbCrLf & vbCrLf & Trim$(standardError)
         End If
         GoTo CleanupAndShowError
+    End If
+
+    ' The resolver writes each row's result as soon as it is resolved, so a
+    ' non-zero exit code (a mid-batch crash, a cancellation, a config error)
+    ' does not mean the output file is empty or unusable -- import whatever
+    ' rows are present instead of discarding a partially completed batch.
+    ' Surface the failure in the summary rather than hiding it.
+    If exitCode <> 0 Then
+        runFailureText = "The integrated resolver did not finish cleanly."
+        If Len(Trim$(standardError)) > 0 Then
+            runFailureText = runFailureText & vbCrLf & Trim$(standardError)
+        End If
     End If
 
     lines = Split(Replace(ReadUtf8Text(outputPath), vbCrLf, vbLf), vbLf)
@@ -730,14 +763,14 @@ Public Sub ResolveSelectedRows()
 
                 If Len(fields(7)) > 0 Then
                     SetCellHyperlink sheet.Cells(resultRow, imdbUrlColumn), fields(6), fields(6)
-                    sheet.Cells(resultRow, imdbIdColumn).Value = fields(7)
+                    WriteTextValue sheet.Cells(resultRow, imdbIdColumn), fields(7)
                 End If
                 If Len(fields(8)) > 0 Then
-                    sheet.Cells(resultRow, titleColumn).Value = fields(8)
-                    sheet.Cells(resultRow, yearColumn).Value = fields(9)
-                    sheet.Cells(resultRow, runtimeColumn).Value = fields(10)
-                    sheet.Cells(resultRow, titleTypeColumn).Value = fields(11)
-                    sheet.Cells(resultRow, seasonColumn).Value = fields(12)
+                    WriteTextValue sheet.Cells(resultRow, titleColumn), fields(8)
+                    WriteTextValue sheet.Cells(resultRow, yearColumn), fields(9)
+                    WriteTextValue sheet.Cells(resultRow, runtimeColumn), fields(10)
+                    WriteTextValue sheet.Cells(resultRow, titleTypeColumn), fields(11)
+                    WriteTextValue sheet.Cells(resultRow, seasonColumn), fields(12)
                 End If
 
                 WriteTextIfBlank sheet.Cells(resultRow, studioColumn), fields(13)
@@ -777,15 +810,27 @@ Public Sub ResolveSelectedRows()
     DeleteTemporaryFile inputPath
     DeleteTemporaryFile outputPath
 
-    MsgBox "Integrated resolution finished." & vbCrLf & vbCrLf & _
-           "Complete: " & CStr(resolved) & vbCrLf & _
-           "Partial: " & CStr(partial) & vbCrLf & _
-           "Needs review: " & CStr(review) & vbCrLf & _
-           "Cancelled: " & CStr(cancelled) & vbCrLf & _
-           "Skipped: " & CStr(skipped + skippedBlank + skippedUPCE) & vbCrLf & _
-           "Errors: " & CStr(failed), _
-           IIf(review + cancelled + failed > 0, vbExclamation, vbInformation), _
-           "MediaCatalog"
+    If Len(runFailureText) > 0 Then
+        MsgBox runFailureText & vbCrLf & vbCrLf & _
+               "Rows imported before the failure:" & vbCrLf & _
+               "Complete: " & CStr(resolved) & vbCrLf & _
+               "Partial: " & CStr(partial) & vbCrLf & _
+               "Needs review: " & CStr(review) & vbCrLf & _
+               "Cancelled: " & CStr(cancelled) & vbCrLf & _
+               "Skipped: " & CStr(skipped + skippedBlank + skippedUPCE) & vbCrLf & _
+               "Errors: " & CStr(failed), _
+               vbExclamation, "MediaCatalog"
+    Else
+        MsgBox "Integrated resolution finished." & vbCrLf & vbCrLf & _
+               "Complete: " & CStr(resolved) & vbCrLf & _
+               "Partial: " & CStr(partial) & vbCrLf & _
+               "Needs review: " & CStr(review) & vbCrLf & _
+               "Cancelled: " & CStr(cancelled) & vbCrLf & _
+               "Skipped: " & CStr(skipped + skippedBlank + skippedUPCE) & vbCrLf & _
+               "Errors: " & CStr(failed), _
+               IIf(review + cancelled + failed > 0, vbExclamation, vbInformation), _
+               "MediaCatalog"
+    End If
     Exit Sub
 
 CleanupAndShowError:
@@ -1442,13 +1487,14 @@ Public Sub LookupIMDbForCurrentRow()
 
                 If UBound(fields) >= 9 Then
                     If fields(0) = "1" Then
-                        sheet.Cells(CLng(rowValue), imdbUrlColumn).Value = fields(2)
-                        sheet.Cells(CLng(rowValue), imdbIdColumn).Value = fields(1)
-                        sheet.Cells(CLng(rowValue), imdbTitleColumn).Value = fields(3)
-                        sheet.Cells(CLng(rowValue), imdbYearColumn).Value = fields(4)
-                        sheet.Cells(CLng(rowValue), imdbRuntimeColumn).Value = fields(5)
-                        sheet.Cells(CLng(rowValue), imdbTitleTypeColumn).Value = fields(6)
-                        sheet.Cells(CLng(rowValue), imdbSeasonColumn).Value = fields(7)
+                        ' Hyperlinked, matching the integrated resolver's IMDb URL column.
+                        SetCellHyperlink sheet.Cells(CLng(rowValue), imdbUrlColumn), fields(2), fields(2)
+                        WriteTextValue sheet.Cells(CLng(rowValue), imdbIdColumn), fields(1)
+                        WriteTextValue sheet.Cells(CLng(rowValue), imdbTitleColumn), fields(3)
+                        WriteTextValue sheet.Cells(CLng(rowValue), imdbYearColumn), fields(4)
+                        WriteTextValue sheet.Cells(CLng(rowValue), imdbRuntimeColumn), fields(5)
+                        WriteTextValue sheet.Cells(CLng(rowValue), imdbTitleTypeColumn), fields(6)
+                        WriteTextValue sheet.Cells(CLng(rowValue), imdbSeasonColumn), fields(7)
 
                         If fields(9) = "imdb_id" Then
                             sheet.Cells(CLng(rowValue), statusColumn).Value = "OK - IMDb ID"

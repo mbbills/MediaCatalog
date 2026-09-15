@@ -212,7 +212,10 @@ Sub SetCalcCellHyperlink( _
     )
     oField.URL = address
     oField.Representation = displayText
-    oText.insertTextContent(oText.End, oField, False)
+    ' oText.End raises IndexOutOfBoundsException on some LibreOffice builds
+    ' (reproduced on 25.2.7.2) when the cell text is empty; a fresh cursor
+    ' is the compatible insertion point.
+    oText.insertTextContent(oText.createTextCursor(), oField, False)
 
 End Sub
 
@@ -286,8 +289,12 @@ Sub ResolveSelectedRows()
     Dim skipped As Long
     Dim failed As Long
     Dim failureText As String
+    Dim lastWriteStage As String
+    Dim inputClosed As Boolean
+    Dim outputClosed As Boolean
 
     On Error GoTo IntegratedError
+    lastWriteStage = "setup"
 
     GlobalScope.BasicLibraries.LoadLibrary("ScriptForge")
     Set FSO = CreateScriptService("FileSystem")
@@ -376,8 +383,21 @@ Sub ResolveSelectedRows()
     )
 
     For i = oSelection.RangeAddress.StartRow To oSelection.RangeAddress.EndRow
-        If barcodeTypeColumn >= 0 And _
-           NormalizeCalcHeader(oSheet.getCellByPosition(barcodeTypeColumn, i).String) = "upce" Then
+        ' Basic's "And" does not short-circuit: evaluating the second
+        ' operand when barcodeTypeColumn is -1 (no recognized barcode-type
+        ' header on this sheet) calls getCellByPosition(-1, i), which
+        ' raises IndexOutOfBoundsException. Nest the checks instead.
+        Dim isUPCERow As Boolean
+        isUPCERow = False
+        If barcodeTypeColumn >= 0 Then
+            isUPCERow = ( _
+                NormalizeCalcHeader( _
+                    oSheet.getCellByPosition(barcodeTypeColumn, i).String _
+                ) = "upce" _
+            )
+        End If
+
+        If isUPCERow Then
             skippedUPCE = skippedUPCE + 1
             oSheet.getCellByPosition(statusColumn, i).String = "UPC_E skipped"
         Else
@@ -403,6 +423,7 @@ Sub ResolveSelectedRows()
         End If
     Next i
     inputFile.CloseFile()
+    inputClosed = True
 
     If requestedCount = 0 Then
         MsgBox _
@@ -445,14 +466,17 @@ Sub ResolveSelectedRows()
             fields = Split(resultLine, Chr(9))
             If UBound(fields) >= 24 Then
                 i = CLng(fields(0))
+                lastWriteStage = "row " & CStr(i) & ": reading result fields"
 
                 If fields(4) <> "" Then
+                    lastWriteStage = "row " & CStr(i) & ": Blu-ray.com URL hyperlink"
                     SetCalcCellHyperlink _
                         oSheet.getCellByPosition(blurayUrlColumn, i), _
                         fields(4), _
                         fields(4)
                 End If
                 If fields(5) <> "" Then
+                    lastWriteStage = "row " & CStr(i) & ": Blu-ray.com Title hyperlink"
                     SetCalcCellHyperlink _
                         oSheet.getCellByPosition(releaseTitleColumn, i), _
                         fields(4), _
@@ -460,13 +484,16 @@ Sub ResolveSelectedRows()
                 End If
 
                 If fields(7) <> "" Then
+                    lastWriteStage = "row " & CStr(i) & ": IMDb URL hyperlink"
                     SetCalcCellHyperlink _
                         oSheet.getCellByPosition(imdbUrlColumn, i), _
                         fields(6), _
                         fields(6)
+                    lastWriteStage = "row " & CStr(i) & ": IMDb ID"
                     oSheet.getCellByPosition(imdbIdColumn, i).String = fields(7)
                 End If
                 If fields(8) <> "" Then
+                    lastWriteStage = "row " & CStr(i) & ": IMDb Title/Year/Runtime/Type/Season"
                     oSheet.getCellByPosition(titleColumn, i).String = fields(8)
                     oSheet.getCellByPosition(yearColumn, i).String = fields(9)
                     oSheet.getCellByPosition(runtimeColumn, i).String = fields(10)
@@ -474,17 +501,28 @@ Sub ResolveSelectedRows()
                     oSheet.getCellByPosition(seasonColumn, i).String = fields(12)
                 End If
 
+                lastWriteStage = "row " & CStr(i) & ": Studio"
                 SetCalcTextIfBlank oSheet.getCellByPosition(studioColumn, i), fields(13)
+                lastWriteStage = "row " & CStr(i) & ": Blu-ray Year"
                 SetCalcNumberIfBlank oSheet.getCellByPosition(blurayYearColumn, i), fields(14)
+                lastWriteStage = "row " & CStr(i) & ": Blu-ray Runtime"
                 SetCalcNumberIfBlank oSheet.getCellByPosition(blurayRuntimeColumn, i), fields(15)
+                lastWriteStage = "row " & CStr(i) & ": Content Rating"
                 SetCalcTextIfBlank oSheet.getCellByPosition(ratingColumn, i), fields(16)
+                lastWriteStage = "row " & CStr(i) & ": Physical Release Date"
                 SetCalcIsoDateIfBlank oSheet.getCellByPosition(releaseDateColumn, i), fields(17)
+                lastWriteStage = "row " & CStr(i) & ": Disc Format"
                 SetCalcTextIfBlank oSheet.getCellByPosition(discFormatColumn, i), fields(18)
+                lastWriteStage = "row " & CStr(i) & ": Video Codec"
                 SetCalcTextIfBlank oSheet.getCellByPosition(codecColumn, i), fields(19)
+                lastWriteStage = "row " & CStr(i) & ": Resolution"
                 SetCalcTextIfBlank oSheet.getCellByPosition(resolutionColumn, i), fields(20)
+                lastWriteStage = "row " & CStr(i) & ": Aspect Ratio"
                 SetCalcTextIfBlank oSheet.getCellByPosition(aspectColumn, i), fields(21)
+                lastWriteStage = "row " & CStr(i) & ": Disc Count / Capacities"
                 SetCalcTextIfBlank oSheet.getCellByPosition(discCountColumn, i), fields(22)
 
+                lastWriteStage = "row " & CStr(i) & ": Status / Error"
                 statusText = fields(1)
                 If fields(2) <> "" Then statusText = statusText & ": " & fields(2)
                 oSheet.getCellByPosition(statusColumn, i).String = statusText
@@ -508,6 +546,7 @@ Sub ResolveSelectedRows()
         End If
     Loop
     outputFile.CloseFile()
+    outputClosed = True
 
 IntegratedSummary:
     If failureText <> "" Then
@@ -530,6 +569,14 @@ IntegratedSummary:
 
 IntegratedCleanup:
     On Error Resume Next
+    ' Close any handle left open by an error that skipped the normal
+    ' CloseFile call, so DeleteFile below never fights a locked file.
+    ' ScriptForge's own FILENOTOPENERROR dialog for a double CloseFile is
+    ' not caught by On Error Resume Next, so guard with a flag rather than
+    ' relying on IsNull (the object reference stays non-null after a
+    ' successful close).
+    If Not IsNull(inputFile) And Not inputClosed Then inputFile.CloseFile()
+    If Not IsNull(outputFile) And Not outputClosed Then outputFile.CloseFile()
     If inputPath <> "" Then
         If FSO.FileExists(inputPath) Then FSO.DeleteFile(inputPath)
     End If
@@ -540,7 +587,10 @@ IntegratedCleanup:
     Exit Sub
 
 IntegratedError:
-    failureText = Error$
+    failureText = Error$ & " [Err " & CStr(Err) & "]"
+    If lastWriteStage <> "" Then
+        failureText = failureText & Chr(10) & "Last stage: " & lastWriteStage
+    End If
     Resume IntegratedSummary
 
 End Sub
@@ -726,8 +776,12 @@ Sub ResolveSelectedUPCsByProvider( _
     Dim failed As Long
     Dim cancelled As Long
     Dim failureText As String
+    Dim lastWriteStage As String
+    Dim inputClosed As Boolean
+    Dim outputClosed As Boolean
 
     On Error GoTo LookupError
+    lastWriteStage = "setup"
 
     GlobalScope.BasicLibraries.LoadLibrary("ScriptForge")
     Set FSO = CreateScriptService("FileSystem")
@@ -861,6 +915,7 @@ Sub ResolveSelectedUPCsByProvider( _
     Next i
 
     inputFile.CloseFile()
+    inputClosed = True
 
     If requestedCount = 0 Then
         MsgBox _
@@ -911,24 +966,29 @@ Sub ResolveSelectedUPCsByProvider( _
 
             If UBound(fields) >= 6 Then
                 i = CLng(fields(0))
+                lastWriteStage = "row " & CStr(i) & ": reading result fields"
 
                 Select Case fields(2)
                     Case "OK"
                         If addHyperlink Then
+                            lastWriteStage = "row " & CStr(i) & ": title hyperlink"
                             SetCalcCellHyperlink _
                                 oSheet.getCellByPosition(titleColumn, i), _
                                 fields(6), _
                                 fields(3)
+                            lastWriteStage = "row " & CStr(i) & ": URL hyperlink"
                             SetCalcCellHyperlink _
                                 oSheet.getCellByPosition(urlColumn, i), _
                                 fields(6), _
                                 fields(6)
                         Else
+                            lastWriteStage = "row " & CStr(i) & ": title (no hyperlink)"
                             SetCalcCellHyperlink _
                                 oSheet.getCellByPosition(titleColumn, i), _
                                 "", _
                                 fields(3)
                         End If
+                        lastWriteStage = "row " & CStr(i) & ": Status / Error"
                         If fields(4) = "No UPC/EAN, URL OK" Then
                             oSheet.getCellByPosition( _
                                 statusColumn, i _
@@ -940,20 +1000,24 @@ Sub ResolveSelectedUPCsByProvider( _
                         End If
                         matched = matched + 1
                     Case "NOT_FOUND"
+                        lastWriteStage = "row " & CStr(i) & ": NOT_FOUND title/status"
                         oSheet.getCellByPosition(titleColumn, i).String = "[NOT FOUND]"
                         oSheet.getCellByPosition(statusColumn, i).String = _
                             providerCode & ": " & fields(5)
                         notFound = notFound + 1
                     Case "AMBIGUOUS"
+                        lastWriteStage = "row " & CStr(i) & ": AMBIGUOUS title/status"
                         oSheet.getCellByPosition(titleColumn, i).String = "[AMBIGUOUS]"
                         oSheet.getCellByPosition(statusColumn, i).String = _
                             providerCode & ": " & fields(5)
                         ambiguous = ambiguous + 1
                     Case "CANCELLED"
+                        lastWriteStage = "row " & CStr(i) & ": CANCELLED status"
                         oSheet.getCellByPosition(statusColumn, i).String = _
                             providerCode & ": Cancelled by user"
                         cancelled = cancelled + 1
                     Case Else
+                        lastWriteStage = "row " & CStr(i) & ": failure status"
                         oSheet.getCellByPosition(statusColumn, i).String = _
                             providerCode & ": " & fields(5)
                         failed = failed + 1
@@ -965,6 +1029,7 @@ Sub ResolveSelectedUPCsByProvider( _
     Loop
 
     outputFile.CloseFile()
+    outputClosed = True
 
 ShowSummary:
 
@@ -991,6 +1056,8 @@ ShowSummary:
 Cleanup:
 
     On Error Resume Next
+    If Not IsNull(inputFile) And Not inputClosed Then inputFile.CloseFile()
+    If Not IsNull(outputFile) And Not outputClosed Then outputFile.CloseFile()
     If inputPath <> "" Then
         If FSO.FileExists(inputPath) Then FSO.DeleteFile(inputPath)
     End If
@@ -1002,7 +1069,10 @@ Cleanup:
 
 LookupError:
 
-    failureText = Error$
+    failureText = Error$ & " [Err " & CStr(Err) & "]"
+    If lastWriteStage <> "" Then
+        failureText = failureText & Chr(10) & "Last stage: " & lastWriteStage
+    End If
     Resume ShowSummary
 
 End Sub
@@ -1352,8 +1422,12 @@ Sub SetCalcNumberIfBlank( _
     value As String _
 )
 
+    ' Despite the name (kept for the IsNumeric sanity check on the parsed
+    ' value), this stores the figure as text like every other field rather
+    ' than as a native number Calc could reformat, sum, or otherwise treat
+    ' differently from the rest of the sheet.
     If Trim(oCell.String) = "" And IsNumeric(value) Then
-        oCell.Value = CDbl(value)
+        oCell.String = value
     End If
 
 End Sub
@@ -1452,6 +1526,8 @@ Sub EnrichSelectedBluRayDetails()
     Dim failed As Long
     Dim cancelled As Long
     Dim failureText As String
+    Dim inputClosed As Boolean
+    Dim outputClosed As Boolean
 
     On Error GoTo EnrichmentError
 
@@ -1571,6 +1647,7 @@ Sub EnrichSelectedBluRayDetails()
     Next rowNum
 
     inputFile.CloseFile()
+    inputClosed = True
 
     If requestedCount = 0 Then
         MsgBox _
@@ -1677,6 +1754,7 @@ Sub EnrichSelectedBluRayDetails()
     Loop
 
     outputFile.CloseFile()
+    outputClosed = True
 
 EnrichmentSummary:
 
@@ -1701,6 +1779,8 @@ EnrichmentSummary:
 EnrichmentCleanup:
 
     On Error Resume Next
+    If Not IsNull(inputFile) And Not inputClosed Then inputFile.CloseFile()
+    If Not IsNull(outputFile) And Not outputClosed Then outputFile.CloseFile()
     If inputPath <> "" Then
         If FSO.FileExists(inputPath) Then FSO.DeleteFile(inputPath)
     End If
@@ -1748,6 +1828,8 @@ Function LookupIMDbRow( _
     Dim resultLine As String
     Dim fields As Variant
     Dim failureText As String
+    Dim inputClosed As Boolean
+    Dim outputClosed As Boolean
     Dim releaseTitleColumn As Long
     Dim imdbUrlColumn As Long
     Dim imdbIdColumn As Long
@@ -1811,6 +1893,7 @@ Function LookupIMDbRow( _
     inputFile.WriteLine(rawName)
     inputFile.WriteLine(imdbIdHint)
     inputFile.CloseFile()
+    inputClosed = True
 
     q = Chr(34)
 
@@ -1865,6 +1948,7 @@ Function LookupIMDbRow( _
 
     resultLine = outputFile.ReadLine()
     outputFile.CloseFile()
+    outputClosed = True
 
     fields = Split(resultLine, Chr(9))
 
@@ -1877,31 +1961,24 @@ Function LookupIMDbRow( _
 
     If fields(0) = "1" Then
 
-        oSheet.getCellByPosition(imdbUrlColumn, rowNum).String = fields(2)
+        ' Hyperlinked, matching the integrated resolver's IMDb URL column.
+        SetCalcCellHyperlink _
+            oSheet.getCellByPosition(imdbUrlColumn, rowNum), _
+            fields(2), _
+            fields(2)
 
         oSheet.getCellByPosition(imdbIdColumn, rowNum).String = fields(1)
 
         oSheet.getCellByPosition(imdbTitleColumn, rowNum).String = fields(3)
 
-        If fields(4) <> "" Then
-            oSheet.getCellByPosition(imdbYearColumn, rowNum).Value = CDbl(fields(4))
-        Else
-            oSheet.getCellByPosition(imdbYearColumn, rowNum).String = ""
-        End If
-
-        If fields(5) <> "" Then
-            oSheet.getCellByPosition(imdbRuntimeColumn, rowNum).Value = CDbl(fields(5))
-        Else
-            oSheet.getCellByPosition(imdbRuntimeColumn, rowNum).String = ""
-        End If
-
+        ' Written as text like every other MediaCatalog field (including
+        ' the integrated resolver's equivalent write), not as a native
+        ' number: a numeric cell value sorts/formats/exports differently
+        ' from the rest of the sheet for no benefit here.
+        oSheet.getCellByPosition(imdbYearColumn, rowNum).String = fields(4)
+        oSheet.getCellByPosition(imdbRuntimeColumn, rowNum).String = fields(5)
         oSheet.getCellByPosition(imdbTitleTypeColumn, rowNum).String = fields(6)
-
-        If fields(7) <> "" Then
-            oSheet.getCellByPosition(imdbSeasonColumn, rowNum).Value = CDbl(fields(7))
-        Else
-            oSheet.getCellByPosition(imdbSeasonColumn, rowNum).String = ""
-        End If
+        oSheet.getCellByPosition(imdbSeasonColumn, rowNum).String = fields(7)
 
         If fields(9) = "imdb_id" Then
             oSheet.getCellByPosition(statusColumn, rowNum).String = "OK - IMDb ID"
@@ -1927,6 +2004,9 @@ Function LookupIMDbRow( _
 Cleanup:
 
     On Error Resume Next
+
+    If Not IsNull(inputFile) And Not inputClosed Then inputFile.CloseFile()
+    If Not IsNull(outputFile) And Not outputClosed Then outputFile.CloseFile()
 
     If inputPath <> "" Then
         If FSO.FileExists(inputPath) Then
