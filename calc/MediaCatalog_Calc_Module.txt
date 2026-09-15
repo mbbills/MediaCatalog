@@ -289,8 +289,10 @@ Sub ResolveSelectedRows()
     Dim skipped As Long
     Dim failed As Long
     Dim failureText As String
+    Dim lastWriteStage As String
 
     On Error GoTo IntegratedError
+    lastWriteStage = "setup"
 
     GlobalScope.BasicLibraries.LoadLibrary("ScriptForge")
     Set FSO = CreateScriptService("FileSystem")
@@ -448,14 +450,17 @@ Sub ResolveSelectedRows()
             fields = Split(resultLine, Chr(9))
             If UBound(fields) >= 24 Then
                 i = CLng(fields(0))
+                lastWriteStage = "row " & CStr(i) & ": reading result fields"
 
                 If fields(4) <> "" Then
+                    lastWriteStage = "row " & CStr(i) & ": Blu-ray.com URL hyperlink"
                     SetCalcCellHyperlink _
                         oSheet.getCellByPosition(blurayUrlColumn, i), _
                         fields(4), _
                         fields(4)
                 End If
                 If fields(5) <> "" Then
+                    lastWriteStage = "row " & CStr(i) & ": Blu-ray.com Title hyperlink"
                     SetCalcCellHyperlink _
                         oSheet.getCellByPosition(releaseTitleColumn, i), _
                         fields(4), _
@@ -463,13 +468,16 @@ Sub ResolveSelectedRows()
                 End If
 
                 If fields(7) <> "" Then
+                    lastWriteStage = "row " & CStr(i) & ": IMDb URL hyperlink"
                     SetCalcCellHyperlink _
                         oSheet.getCellByPosition(imdbUrlColumn, i), _
                         fields(6), _
                         fields(6)
+                    lastWriteStage = "row " & CStr(i) & ": IMDb ID"
                     oSheet.getCellByPosition(imdbIdColumn, i).String = fields(7)
                 End If
                 If fields(8) <> "" Then
+                    lastWriteStage = "row " & CStr(i) & ": IMDb Title/Year/Runtime/Type/Season"
                     oSheet.getCellByPosition(titleColumn, i).String = fields(8)
                     oSheet.getCellByPosition(yearColumn, i).String = fields(9)
                     oSheet.getCellByPosition(runtimeColumn, i).String = fields(10)
@@ -477,17 +485,28 @@ Sub ResolveSelectedRows()
                     oSheet.getCellByPosition(seasonColumn, i).String = fields(12)
                 End If
 
+                lastWriteStage = "row " & CStr(i) & ": Studio"
                 SetCalcTextIfBlank oSheet.getCellByPosition(studioColumn, i), fields(13)
+                lastWriteStage = "row " & CStr(i) & ": Blu-ray Year"
                 SetCalcNumberIfBlank oSheet.getCellByPosition(blurayYearColumn, i), fields(14)
+                lastWriteStage = "row " & CStr(i) & ": Blu-ray Runtime"
                 SetCalcNumberIfBlank oSheet.getCellByPosition(blurayRuntimeColumn, i), fields(15)
+                lastWriteStage = "row " & CStr(i) & ": Content Rating"
                 SetCalcTextIfBlank oSheet.getCellByPosition(ratingColumn, i), fields(16)
+                lastWriteStage = "row " & CStr(i) & ": Physical Release Date"
                 SetCalcIsoDateIfBlank oSheet.getCellByPosition(releaseDateColumn, i), fields(17)
+                lastWriteStage = "row " & CStr(i) & ": Disc Format"
                 SetCalcTextIfBlank oSheet.getCellByPosition(discFormatColumn, i), fields(18)
+                lastWriteStage = "row " & CStr(i) & ": Video Codec"
                 SetCalcTextIfBlank oSheet.getCellByPosition(codecColumn, i), fields(19)
+                lastWriteStage = "row " & CStr(i) & ": Resolution"
                 SetCalcTextIfBlank oSheet.getCellByPosition(resolutionColumn, i), fields(20)
+                lastWriteStage = "row " & CStr(i) & ": Aspect Ratio"
                 SetCalcTextIfBlank oSheet.getCellByPosition(aspectColumn, i), fields(21)
+                lastWriteStage = "row " & CStr(i) & ": Disc Count / Capacities"
                 SetCalcTextIfBlank oSheet.getCellByPosition(discCountColumn, i), fields(22)
 
+                lastWriteStage = "row " & CStr(i) & ": Status / Error"
                 statusText = fields(1)
                 If fields(2) <> "" Then statusText = statusText & ": " & fields(2)
                 oSheet.getCellByPosition(statusColumn, i).String = statusText
@@ -547,7 +566,10 @@ IntegratedCleanup:
     Exit Sub
 
 IntegratedError:
-    failureText = Error$
+    failureText = Error$ & " [Err " & CStr(Err) & "]"
+    If lastWriteStage <> "" Then
+        failureText = failureText & Chr(10) & "Last stage: " & lastWriteStage
+    End If
     Resume IntegratedSummary
 
 End Sub
@@ -733,8 +755,10 @@ Sub ResolveSelectedUPCsByProvider( _
     Dim failed As Long
     Dim cancelled As Long
     Dim failureText As String
+    Dim lastWriteStage As String
 
     On Error GoTo LookupError
+    lastWriteStage = "setup"
 
     GlobalScope.BasicLibraries.LoadLibrary("ScriptForge")
     Set FSO = CreateScriptService("FileSystem")
@@ -918,24 +942,29 @@ Sub ResolveSelectedUPCsByProvider( _
 
             If UBound(fields) >= 6 Then
                 i = CLng(fields(0))
+                lastWriteStage = "row " & CStr(i) & ": reading result fields"
 
                 Select Case fields(2)
                     Case "OK"
                         If addHyperlink Then
+                            lastWriteStage = "row " & CStr(i) & ": title hyperlink"
                             SetCalcCellHyperlink _
                                 oSheet.getCellByPosition(titleColumn, i), _
                                 fields(6), _
                                 fields(3)
+                            lastWriteStage = "row " & CStr(i) & ": URL hyperlink"
                             SetCalcCellHyperlink _
                                 oSheet.getCellByPosition(urlColumn, i), _
                                 fields(6), _
                                 fields(6)
                         Else
+                            lastWriteStage = "row " & CStr(i) & ": title (no hyperlink)"
                             SetCalcCellHyperlink _
                                 oSheet.getCellByPosition(titleColumn, i), _
                                 "", _
                                 fields(3)
                         End If
+                        lastWriteStage = "row " & CStr(i) & ": Status / Error"
                         If fields(4) = "No UPC/EAN, URL OK" Then
                             oSheet.getCellByPosition( _
                                 statusColumn, i _
@@ -947,20 +976,24 @@ Sub ResolveSelectedUPCsByProvider( _
                         End If
                         matched = matched + 1
                     Case "NOT_FOUND"
+                        lastWriteStage = "row " & CStr(i) & ": NOT_FOUND title/status"
                         oSheet.getCellByPosition(titleColumn, i).String = "[NOT FOUND]"
                         oSheet.getCellByPosition(statusColumn, i).String = _
                             providerCode & ": " & fields(5)
                         notFound = notFound + 1
                     Case "AMBIGUOUS"
+                        lastWriteStage = "row " & CStr(i) & ": AMBIGUOUS title/status"
                         oSheet.getCellByPosition(titleColumn, i).String = "[AMBIGUOUS]"
                         oSheet.getCellByPosition(statusColumn, i).String = _
                             providerCode & ": " & fields(5)
                         ambiguous = ambiguous + 1
                     Case "CANCELLED"
+                        lastWriteStage = "row " & CStr(i) & ": CANCELLED status"
                         oSheet.getCellByPosition(statusColumn, i).String = _
                             providerCode & ": Cancelled by user"
                         cancelled = cancelled + 1
                     Case Else
+                        lastWriteStage = "row " & CStr(i) & ": failure status"
                         oSheet.getCellByPosition(statusColumn, i).String = _
                             providerCode & ": " & fields(5)
                         failed = failed + 1
@@ -1011,7 +1044,10 @@ Cleanup:
 
 LookupError:
 
-    failureText = Error$
+    failureText = Error$ & " [Err " & CStr(Err) & "]"
+    If lastWriteStage <> "" Then
+        failureText = failureText & Chr(10) & "Last stage: " & lastWriteStage
+    End If
     Resume ShowSummary
 
 End Sub
