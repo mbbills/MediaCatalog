@@ -605,6 +605,7 @@ Public Sub ResolveSelectedRows()
     Dim cancelled As Long
     Dim skipped As Long
     Dim failed As Long
+    Dim runFailureText As String
 
     On Error GoTo FatalError
 
@@ -706,12 +707,24 @@ Public Sub ResolveSelectedRows()
                   QuoteArgument(inputPath) & " " & QuoteArgument(outputPath)
 
     exitCode = RunCommandAndWait(commandLine, 43200, standardOutput, standardError)
-    If exitCode <> 0 Or Not FileExists(outputPath) Then
+    If Not FileExists(outputPath) Then
         errorText = "Integrated resolver failed."
         If Len(Trim$(standardError)) > 0 Then
             errorText = errorText & vbCrLf & vbCrLf & Trim$(standardError)
         End If
         GoTo CleanupAndShowError
+    End If
+
+    ' The resolver writes each row's result as soon as it is resolved, so a
+    ' non-zero exit code (a mid-batch crash, a cancellation, a config error)
+    ' does not mean the output file is empty or unusable -- import whatever
+    ' rows are present instead of discarding a partially completed batch.
+    ' Surface the failure in the summary rather than hiding it.
+    If exitCode <> 0 Then
+        runFailureText = "The integrated resolver did not finish cleanly."
+        If Len(Trim$(standardError)) > 0 Then
+            runFailureText = runFailureText & vbCrLf & Trim$(standardError)
+        End If
     End If
 
     lines = Split(Replace(ReadUtf8Text(outputPath), vbCrLf, vbLf), vbLf)
@@ -777,15 +790,27 @@ Public Sub ResolveSelectedRows()
     DeleteTemporaryFile inputPath
     DeleteTemporaryFile outputPath
 
-    MsgBox "Integrated resolution finished." & vbCrLf & vbCrLf & _
-           "Complete: " & CStr(resolved) & vbCrLf & _
-           "Partial: " & CStr(partial) & vbCrLf & _
-           "Needs review: " & CStr(review) & vbCrLf & _
-           "Cancelled: " & CStr(cancelled) & vbCrLf & _
-           "Skipped: " & CStr(skipped + skippedBlank + skippedUPCE) & vbCrLf & _
-           "Errors: " & CStr(failed), _
-           IIf(review + cancelled + failed > 0, vbExclamation, vbInformation), _
-           "MediaCatalog"
+    If Len(runFailureText) > 0 Then
+        MsgBox runFailureText & vbCrLf & vbCrLf & _
+               "Rows imported before the failure:" & vbCrLf & _
+               "Complete: " & CStr(resolved) & vbCrLf & _
+               "Partial: " & CStr(partial) & vbCrLf & _
+               "Needs review: " & CStr(review) & vbCrLf & _
+               "Cancelled: " & CStr(cancelled) & vbCrLf & _
+               "Skipped: " & CStr(skipped + skippedBlank + skippedUPCE) & vbCrLf & _
+               "Errors: " & CStr(failed), _
+               vbExclamation, "MediaCatalog"
+    Else
+        MsgBox "Integrated resolution finished." & vbCrLf & vbCrLf & _
+               "Complete: " & CStr(resolved) & vbCrLf & _
+               "Partial: " & CStr(partial) & vbCrLf & _
+               "Needs review: " & CStr(review) & vbCrLf & _
+               "Cancelled: " & CStr(cancelled) & vbCrLf & _
+               "Skipped: " & CStr(skipped + skippedBlank + skippedUPCE) & vbCrLf & _
+               "Errors: " & CStr(failed), _
+               IIf(review + cancelled + failed > 0, vbExclamation, vbInformation), _
+               "MediaCatalog"
+    End If
     Exit Sub
 
 CleanupAndShowError:

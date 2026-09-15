@@ -9,6 +9,7 @@ from the winning identifier.
 """
 
 import csv
+import os
 import sys
 import urllib.error
 from pathlib import Path
@@ -341,6 +342,7 @@ def process_rows(
     progress,
     client_factory=BlurayClient,
     resolve_row_func=resolve_row,
+    on_result=None,
 ):
     results = []
     cache = {}
@@ -377,6 +379,8 @@ def process_rows(
             cache[cache_key].pop("_network_used", None)
 
         results.append(resolved)
+        if on_result is not None:
+            on_result(resolved)
         progress.finish_item(resolved.get("status"))
 
         if progress.cancelled():
@@ -391,17 +395,41 @@ def process_rows(
                 break
 
     for row in rows[len(results):]:
-        results.append(cancelled_result(row))
+        cancelled = cancelled_result(row)
+        results.append(cancelled)
+        if on_result is not None:
+            on_result(cancelled)
 
     return results
 
 
+def open_incremental_writer(path):
+    """Open a TSV writer that leaves every already-written row complete.
+
+    Each row is written and flushed immediately, so at any moment -- even if
+    the process is killed a line later -- everything on disk so far is a
+    whole, parseable row rather than a half-written one.
+    """
+    handle = path.open("w", encoding="utf-8", newline="")
+    writer = csv.writer(handle, dialect="excel-tab", lineterminator="\n")
+    writer.writerow(OUTPUT_FIELDS)
+    handle.flush()
+    return handle, writer
+
+
+def write_result_row(handle, writer, result):
+    writer.writerow([safe_field(result.get(field)) for field in OUTPUT_FIELDS])
+    handle.flush()
+
+
 def write_output(output_path, results):
-    with output_path.open("w", encoding="utf-8", newline="") as destination:
-        writer = csv.writer(destination, dialect="excel-tab", lineterminator="\n")
-        writer.writerow(OUTPUT_FIELDS)
+    """Write a complete result set in one shot (used only by tests/tools)."""
+    handle, writer = open_incremental_writer(output_path)
+    try:
         for result in results:
-            writer.writerow([safe_field(result.get(field)) for field in OUTPUT_FIELDS])
+            write_result_row(handle, writer, result)
+    finally:
+        handle.close()
 
 
 def main():
@@ -411,6 +439,15 @@ def main():
     input_path = Path(sys.argv[1])
     output_path = Path(sys.argv[2])
     rows = read_input(input_path)
+
+    partial_path = output_path.with_name(output_path.name + ".partial")
+    handle, writer = open_incremental_writer(partial_path)
+    rows_written = 0
+
+    def on_result(result):
+        nonlocal rows_written
+        write_result_row(handle, writer, result)
+        rows_written += 1
 
     try:
         settings = load_settings()
@@ -432,18 +469,30 @@ def main():
         if timeout <= 0:
             raise ValueError("timeout_seconds must be positive")
 
-        results = run_with_progress(
+        run_with_progress(
             "MediaCatalog - Integrated resolver",
             len(rows),
-            lambda progress: process_rows(rows, timeout, delay, progress),
+            lambda progress: process_rows(
+                rows, timeout, delay, progress, on_result=on_result
+            ),
             enabled=show_progress,
             always_on_top=always_on_top,
             status_mode="integrated",
         )
-        write_output(output_path, results)
-    except Exception:
-        output_path.unlink(missing_ok=True)
-        raise
+    finally:
+        handle.close()
+        if rows_written > 0:
+            # Rows already on disk are each complete and valid (see
+            # open_incremental_writer): keep them for the front end to
+            # import instead of discarding a partially finished batch,
+            # whether we got here by finishing, cancelling, or raising.
+            os.replace(partial_path, output_path)
+        else:
+            # Nothing was ever resolved (e.g. a settings/config error before
+            # the first row), so preserve the old "no response" signal the
+            # front ends use to report a total failure distinctly from a
+            # completed-with-zero-matches run.
+            partial_path.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
