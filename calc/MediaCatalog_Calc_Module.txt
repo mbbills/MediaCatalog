@@ -1961,7 +1961,11 @@ Function LookupIMDbRow( _
 
     If fields(0) = "1" Then
 
-        oSheet.getCellByPosition(imdbUrlColumn, rowNum).String = fields(2)
+        ' Hyperlinked, matching the integrated resolver's IMDb URL column.
+        SetCalcCellHyperlink _
+            oSheet.getCellByPosition(imdbUrlColumn, rowNum), _
+            fields(2), _
+            fields(2)
 
         oSheet.getCellByPosition(imdbIdColumn, rowNum).String = fields(1)
 

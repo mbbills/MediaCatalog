@@ -1487,7 +1487,8 @@ Public Sub LookupIMDbForCurrentRow()
 
                 If UBound(fields) >= 9 Then
                     If fields(0) = "1" Then
-                        WriteTextValue sheet.Cells(CLng(rowValue), imdbUrlColumn), fields(2)
+                        ' Hyperlinked, matching the integrated resolver's IMDb URL column.
+                        SetCellHyperlink sheet.Cells(CLng(rowValue), imdbUrlColumn), fields(2), fields(2)
                         WriteTextValue sheet.Cells(CLng(rowValue), imdbIdColumn), fields(1)
                         WriteTextValue sheet.Cells(CLng(rowValue), imdbTitleColumn), fields(3)
                         WriteTextValue sheet.Cells(CLng(rowValue), imdbYearColumn), fields(4)
