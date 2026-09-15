@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Started the Access 2019 front end (phase 1): a flat `MediaCatalog` table
+  schema (`access/schema.sql`) and a basic bound data-entry/browse form,
+  built via `access/build_access_database.vbs` since `.accdb` is a binary
+  format. No resolver integration yet. See `access/README.md`.
 - Added an `Inventory Number` column (new column A in both templates) as the
   user's manual physical-copy/location identifier, e.g. `BR37`. `Spine Tag`
   is an older name for the same concept; existing catalogs that already use

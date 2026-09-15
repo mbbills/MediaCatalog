@@ -325,6 +325,10 @@ MediaCatalog/
 ├── calc/
 │   ├── MediaCatalog_Calc_Module.txt
 │   └── HEADERS.txt
+├── access/                            # early-phase Access 2019 front end; see access/README.md
+│   ├── schema.sql
+│   ├── build_access_database.vbs
+│   └── README.md
 ├── scripts/
 │   ├── resolve_rows.py
 │   ├── install_media_catalog.py
