@@ -290,6 +290,8 @@ Sub ResolveSelectedRows()
     Dim failed As Long
     Dim failureText As String
     Dim lastWriteStage As String
+    Dim inputClosed As Boolean
+    Dim outputClosed As Boolean
 
     On Error GoTo IntegratedError
     lastWriteStage = "setup"
@@ -421,6 +423,7 @@ Sub ResolveSelectedRows()
         End If
     Next i
     inputFile.CloseFile()
+    inputClosed = True
 
     If requestedCount = 0 Then
         MsgBox _
@@ -543,6 +546,7 @@ Sub ResolveSelectedRows()
         End If
     Loop
     outputFile.CloseFile()
+    outputClosed = True
 
 IntegratedSummary:
     If failureText <> "" Then
@@ -567,8 +571,12 @@ IntegratedCleanup:
     On Error Resume Next
     ' Close any handle left open by an error that skipped the normal
     ' CloseFile call, so DeleteFile below never fights a locked file.
-    If Not IsNull(inputFile) Then inputFile.CloseFile()
-    If Not IsNull(outputFile) Then outputFile.CloseFile()
+    ' ScriptForge's own FILENOTOPENERROR dialog for a double CloseFile is
+    ' not caught by On Error Resume Next, so guard with a flag rather than
+    ' relying on IsNull (the object reference stays non-null after a
+    ' successful close).
+    If Not IsNull(inputFile) And Not inputClosed Then inputFile.CloseFile()
+    If Not IsNull(outputFile) And Not outputClosed Then outputFile.CloseFile()
     If inputPath <> "" Then
         If FSO.FileExists(inputPath) Then FSO.DeleteFile(inputPath)
     End If
@@ -769,6 +777,8 @@ Sub ResolveSelectedUPCsByProvider( _
     Dim cancelled As Long
     Dim failureText As String
     Dim lastWriteStage As String
+    Dim inputClosed As Boolean
+    Dim outputClosed As Boolean
 
     On Error GoTo LookupError
     lastWriteStage = "setup"
@@ -905,6 +915,7 @@ Sub ResolveSelectedUPCsByProvider( _
     Next i
 
     inputFile.CloseFile()
+    inputClosed = True
 
     If requestedCount = 0 Then
         MsgBox _
@@ -1018,6 +1029,7 @@ Sub ResolveSelectedUPCsByProvider( _
     Loop
 
     outputFile.CloseFile()
+    outputClosed = True
 
 ShowSummary:
 
@@ -1044,8 +1056,8 @@ ShowSummary:
 Cleanup:
 
     On Error Resume Next
-    If Not IsNull(inputFile) Then inputFile.CloseFile()
-    If Not IsNull(outputFile) Then outputFile.CloseFile()
+    If Not IsNull(inputFile) And Not inputClosed Then inputFile.CloseFile()
+    If Not IsNull(outputFile) And Not outputClosed Then outputFile.CloseFile()
     If inputPath <> "" Then
         If FSO.FileExists(inputPath) Then FSO.DeleteFile(inputPath)
     End If
@@ -1510,6 +1522,8 @@ Sub EnrichSelectedBluRayDetails()
     Dim failed As Long
     Dim cancelled As Long
     Dim failureText As String
+    Dim inputClosed As Boolean
+    Dim outputClosed As Boolean
 
     On Error GoTo EnrichmentError
 
@@ -1629,6 +1643,7 @@ Sub EnrichSelectedBluRayDetails()
     Next rowNum
 
     inputFile.CloseFile()
+    inputClosed = True
 
     If requestedCount = 0 Then
         MsgBox _
@@ -1735,6 +1750,7 @@ Sub EnrichSelectedBluRayDetails()
     Loop
 
     outputFile.CloseFile()
+    outputClosed = True
 
 EnrichmentSummary:
 
@@ -1759,8 +1775,8 @@ EnrichmentSummary:
 EnrichmentCleanup:
 
     On Error Resume Next
-    If Not IsNull(inputFile) Then inputFile.CloseFile()
-    If Not IsNull(outputFile) Then outputFile.CloseFile()
+    If Not IsNull(inputFile) And Not inputClosed Then inputFile.CloseFile()
+    If Not IsNull(outputFile) And Not outputClosed Then outputFile.CloseFile()
     If inputPath <> "" Then
         If FSO.FileExists(inputPath) Then FSO.DeleteFile(inputPath)
     End If
@@ -1808,6 +1824,8 @@ Function LookupIMDbRow( _
     Dim resultLine As String
     Dim fields As Variant
     Dim failureText As String
+    Dim inputClosed As Boolean
+    Dim outputClosed As Boolean
     Dim releaseTitleColumn As Long
     Dim imdbUrlColumn As Long
     Dim imdbIdColumn As Long
@@ -1871,6 +1889,7 @@ Function LookupIMDbRow( _
     inputFile.WriteLine(rawName)
     inputFile.WriteLine(imdbIdHint)
     inputFile.CloseFile()
+    inputClosed = True
 
     q = Chr(34)
 
@@ -1925,6 +1944,7 @@ Function LookupIMDbRow( _
 
     resultLine = outputFile.ReadLine()
     outputFile.CloseFile()
+    outputClosed = True
 
     fields = Split(resultLine, Chr(9))
 
@@ -1988,8 +2008,8 @@ Cleanup:
 
     On Error Resume Next
 
-    If Not IsNull(inputFile) Then inputFile.CloseFile()
-    If Not IsNull(outputFile) Then outputFile.CloseFile()
+    If Not IsNull(inputFile) And Not inputClosed Then inputFile.CloseFile()
+    If Not IsNull(outputFile) And Not outputClosed Then outputFile.CloseFile()
 
     If inputPath <> "" Then
         If FSO.FileExists(inputPath) Then
