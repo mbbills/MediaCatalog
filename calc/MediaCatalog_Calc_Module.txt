@@ -1422,8 +1422,12 @@ Sub SetCalcNumberIfBlank( _
     value As String _
 )
 
+    ' Despite the name (kept for the IsNumeric sanity check on the parsed
+    ' value), this stores the figure as text like every other field rather
+    ' than as a native number Calc could reformat, sum, or otherwise treat
+    ' differently from the rest of the sheet.
     If Trim(oCell.String) = "" And IsNumeric(value) Then
-        oCell.Value = CDbl(value)
+        oCell.String = value
     End If
 
 End Sub
@@ -1963,25 +1967,14 @@ Function LookupIMDbRow( _
 
         oSheet.getCellByPosition(imdbTitleColumn, rowNum).String = fields(3)
 
-        If fields(4) <> "" Then
-            oSheet.getCellByPosition(imdbYearColumn, rowNum).Value = CDbl(fields(4))
-        Else
-            oSheet.getCellByPosition(imdbYearColumn, rowNum).String = ""
-        End If
-
-        If fields(5) <> "" Then
-            oSheet.getCellByPosition(imdbRuntimeColumn, rowNum).Value = CDbl(fields(5))
-        Else
-            oSheet.getCellByPosition(imdbRuntimeColumn, rowNum).String = ""
-        End If
-
+        ' Written as text like every other MediaCatalog field (including
+        ' the integrated resolver's equivalent write), not as a native
+        ' number: a numeric cell value sorts/formats/exports differently
+        ' from the rest of the sheet for no benefit here.
+        oSheet.getCellByPosition(imdbYearColumn, rowNum).String = fields(4)
+        oSheet.getCellByPosition(imdbRuntimeColumn, rowNum).String = fields(5)
         oSheet.getCellByPosition(imdbTitleTypeColumn, rowNum).String = fields(6)
-
-        If fields(7) <> "" Then
-            oSheet.getCellByPosition(imdbSeasonColumn, rowNum).Value = CDbl(fields(7))
-        Else
-            oSheet.getCellByPosition(imdbSeasonColumn, rowNum).String = ""
-        End If
+        oSheet.getCellByPosition(imdbSeasonColumn, rowNum).String = fields(7)
 
         If fields(9) = "imdb_id" Then
             oSheet.getCellByPosition(statusColumn, rowNum).String = "OK - IMDb ID"
