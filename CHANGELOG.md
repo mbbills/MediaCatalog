@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Access front end phase 2: a "Resolve Current Record" button running the
+  same integrated resolver (`scripts/resolve_rows.py`) Excel/Calc's
+  "Resolve Selected Rows" uses, against the current record only (Access
+  has no spreadsheet-style row selection). See
+  `access/MediaCatalog_Access_Module.bas` and the "Phase 2" section of
+  `access/README.md`. Not yet verified against real Access.
 - Started the Access 2019 front end (phase 1): a flat `MediaCatalog` table
   schema (`access/schema.sql`) and a basic bound data-entry/browse form,
   built via `access/build_access_database.vbs` since `.accdb` is a binary

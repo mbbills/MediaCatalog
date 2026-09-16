@@ -2,8 +2,16 @@ Option Explicit
 
 ' Builds access\MediaCatalog.accdb from source-controlled text:
 '   - schema.sql defines the MediaCatalog table (executed verbatim as DDL).
+'   - MediaCatalog_Access_Module.bas is imported as a standard VBA module
+'     (Phase 2: the integrated resolver, ported from Excel's
+'     ResolveSelectedRows -- see that file's own header comment).
 '   - This script then adds one bound data-entry/browse form via the
-'     classic CreateForm/CreateControl Access automation API.
+'     classic CreateForm/CreateControl Access automation API, including a
+'     "Resolve Current Record" button wired to that module.
+'
+' Importing a VBA module via automation requires the same "Trust access to
+' the VBA project object model" setting as creating the form's controls
+' (see access/README.md) -- both go through Access's VBE object model.
 '
 ' Run on a Windows machine with Access 2019 (or a compatible Access
 ' version) installed:
@@ -23,12 +31,13 @@ Option Explicit
 ' error message and line so it can be fixed (the same process
 ' build_excel_template.vbs went through during Windows 7 testing).
 
-Dim fso, projectRoot, accessDir, schemaFile, outputDatabase
+Dim fso, projectRoot, accessDir, schemaFile, moduleFile, outputDatabase
 Dim textStream, schemaSql
 Dim access
 
 Const acTextBox = 109
 Const acLabel = 100
+Const acCommandButton = 104
 Const acDetail = 0
 Const acForm = 2
 Const acSaveYes = 1
@@ -42,9 +51,11 @@ Set fso = CreateObject("Scripting.FileSystemObject")
 projectRoot = fso.GetAbsolutePathName(WScript.Arguments(0))
 accessDir = fso.BuildPath(projectRoot, "access")
 schemaFile = fso.BuildPath(accessDir, "schema.sql")
+moduleFile = fso.BuildPath(accessDir, "MediaCatalog_Access_Module.bas")
 outputDatabase = fso.BuildPath(accessDir, "MediaCatalog.accdb")
 
 If Not fso.FileExists(schemaFile) Then Fail "Schema file not found: " & schemaFile
+If Not fso.FileExists(moduleFile) Then Fail "VBA module not found: " & moduleFile
 
 Set textStream = fso.OpenTextFile(schemaFile, 1, False, 0)
 schemaSql = textStream.ReadAll
@@ -81,6 +92,18 @@ If Err.Number <> 0 Then
     access.CloseCurrentDatabase
     access.Quit
     Fail "Table creation failed (schema.sql): " & ddlError
+End If
+On Error GoTo 0
+
+On Error Resume Next
+Dim component
+Set component = access.VBE.ActiveVBProject.VBComponents.Import(moduleFile)
+If Err.Number <> 0 Then
+    Dim importError
+    importError = Err.Description
+    access.CloseCurrentDatabase
+    access.Quit
+    Fail "VBA module import failed. Programmatic VBA access may be blocked: " & importError
 End If
 On Error GoTo 0
 
@@ -178,6 +201,24 @@ Sub BuildBrowseForm(app)
 
         topPos = topPos + rowHeight
     Next
+
+    ' Phase 2: "Resolve Current Record" runs the integrated resolver
+    ' (MediaCatalog_Access_Module.bas, ResolveCurrentRecord) against this
+    ' one open record -- Access has no spreadsheet-style row selection, so
+    ' this is the equivalent of Excel/Calc's "Resolve Selected Rows" for a
+    ' single record. The BRdC-only and single-row-IMDb-lookup commands are
+    ' deferred to a later phase, same as Phase 1's form-only scope.
+    Dim btn
+    On Error Resume Next
+    Set btn = app.CreateControl(frm.Name, acCommandButton, acDetail)
+    If Err.Number <> 0 Then Fail "CreateControl (button) failed: " & Err.Description
+    On Error GoTo 0
+    btn.Caption = "Resolve Current Record"
+    btn.OnClick = "=ResolveCurrentRecord()"
+    btn.Left = textLeft
+    btn.Top = topPos + 100
+    btn.Width = textWidth
+    btn.Height = 350
 
     frm.Caption = "MediaCatalog"
     finalName = frm.Name
