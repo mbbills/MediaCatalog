@@ -72,10 +72,12 @@ def normalize_title(text):
 def extract_year(text):
     """
     Extract a year hint when a release title includes one in parentheses or
-    brackets, such as "(2009)" or "[2004]".
+    brackets, such as "(2009)" or "[2004]". A box-set year range such as
+    "(2008-2013)" also counts; the first year of the range is used as the
+    hint.
     """
     match = re.search(
-        r"[\[(](19\d{2}|20\d{2})[\])]",
+        r"[\[(](19\d{2}|20\d{2})(?:\s*[-–]\s*(?:19|20)\d{2})?[\])]",
         text,
     )
 
@@ -121,17 +123,27 @@ def clean_release_name(text):
         "bluray",
         "widescreen",
         "fullscreen",
+        "digibook",
+        "digipack",
+        "steelbook",
+    )
+
+    # Matched as whole words/phrases, not substrings -- otherwise "disc"
+    # would also match inside an unrelated word like "Disclosure".
+    packaging_word_pattern = re.compile(
+        r"\b(?:" + "|".join(re.escape(word) for word in packaging_words) + r")\b",
     )
 
     def remove_packaging_group(match):
         inner = (match.group(1) or match.group(2)).strip()
 
-        # A year can be useful as a matching hint but is not part of
-        # the search title itself.
-        if re.fullmatch(r"(19|20)\d{2}", inner):
+        # A year, or a box-set year range such as "2008-2013", can be
+        # useful as a matching hint but is not part of the search title
+        # itself.
+        if re.fullmatch(r"(19|20)\d{2}(\s*[-–]\s*(19|20)\d{2})?", inner):
             return ""
 
-        if any(word in inner.casefold() for word in packaging_words):
+        if packaging_word_pattern.search(inner.casefold()):
             return ""
 
         return match.group(0)
@@ -140,6 +152,17 @@ def clean_release_name(text):
         r"\(([^()]*)\)|\[([^\[\]]*)\]",
         remove_packaging_group,
         cleaned,
+    )
+
+    # Complete-series box sets, e.g. "Breaking Bad: The Complete Series",
+    # don't correspond to any single IMDb title the way "Season N" does;
+    # dropping the suffix and everything after it leaves the plain series
+    # title, which does have an exact-matchable IMDb entry.
+    cleaned = re.sub(
+        r"\s*[:\-]?\s*(?:The\s+)?Complete\s+Series\b.*$",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
     )
 
     # Example:
@@ -153,15 +176,31 @@ def clean_release_name(text):
         flags=re.IGNORECASE,
     )
 
-    # Blu-ray.com places this UHD marker immediately before the parenthesized
-    # year in some result titles. After the year group has been removed above,
-    # 4K is a trailing product marker rather than title text.
-    cleaned = re.sub(
-        r"\s+4K\s*$",
-        "",
-        cleaned,
-        flags=re.IGNORECASE,
+    # A bare format/packaging word left dangling at the end of the title --
+    # e.g. "Cars 2 Blu-ray" once "(Blu-ray + DVD)" above has been removed --
+    # is product clutter, not title text. Strip repeatedly since more than
+    # one such word can be chained ("Movie Blu-ray 4K").
+    trailing_format_words = (
+        "blu-ray",
+        "bluray",
+        "dvd",
+        "disc",
+        "disk",
+        "4k",
+        "uhd",
+        "ultra hd",
     )
+    trailing_format_pattern = re.compile(
+        r"\s+(?:"
+        + "|".join(re.escape(word) for word in trailing_format_words)
+        + r")\s*$",
+        re.IGNORECASE,
+    )
+    while True:
+        stripped = trailing_format_pattern.sub("", cleaned)
+        if stripped == cleaned:
+            break
+        cleaned = stripped
 
     cleaned = re.sub(r"\s+", " ", cleaned)
 

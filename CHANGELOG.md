@@ -2,6 +2,56 @@
 
 ## Unreleased
 
+- Fixed `imdb_matcher.clean_release_name()` leaving product/packaging
+  clutter in the search title, causing exact-title IMDb matching to miss
+  releases that should have resolved cleanly. Found via a batch of real
+  failing titles walked through with the user. Specific fixes:
+  - A bare format word left dangling outside any parentheses (e.g. the
+    "Blu-ray" in `"Cars 2 Blu-ray (Blu-ray + DVD) (2011)"`, which only
+    had the parenthesized "(Blu-ray + DVD)" stripped, leaving "Cars 2
+    Blu-ray") is now also stripped. This was the single highest-impact
+    defect, hit by 8 of the 10 reported titles (Cars 2; X-Men Origins:
+    Wolverine; The Angry Birds Movie; Toy Story; Toy Story 2; Schindler's
+    List; The Sum of All Fears; 16 Blocks; Beverly Hills Cop).
+  - Packaging-word matching inside a parenthesized group used substring
+    containment (`word in inner`), so "disc" (a packaging word) matched
+    inside unrelated text like "Disclosure" and could wipe out a
+    legitimate parenthetical subtitle. Now matched with word/phrase
+    boundaries.
+  - A parenthesized box-set year range, e.g. "(2008-2013)", was not
+    recognized as a year by either the "drop this group, it's just a
+    year" check or by `extract_year()`; both now accept a range and use
+    its first year.
+  - "DigiBook" and "DigiPack" (real Blu-ray.com packaging terms) were
+    missing from the packaging-word list and so survived cleanup intact,
+    e.g. `"Schindler's List DVD (DigiBook) (1993)"`.
+  - "(The) Complete Series" box-set suffixes (e.g. "Breaking Bad: The
+    Complete Series") were not recognized by `detect_season()`, which
+    only matches "Season N" phrasing, and so were left in the search
+    title verbatim. `clean_release_name()` now strips a trailing
+    "Complete Series" suffix (and everything after it, packaging clutter
+    included), which resolves to the plain series title -- not a full
+    season-aware fix, but sufficient for the exact-title match to find
+    the series' own IMDb entry.
+  - Confirmed NOT a bug and deliberately left alone: a disc covering more
+    than one title at once (e.g. "Toy Story and Toy Story 2 DVD (Disc 3:
+    Supplemental Features) (1995)") has no single correct IMDb target: it
+    still won't exact-match anything after cleanup, which is correct --
+    there's no title fix that could make this resolve to one IMDb ID.
+  - Also confirmed but explicitly out of scope for this pass: a title
+    collision ambiguity for short, reused titles (e.g. "Defiance", which
+    IMDb lists more than once across unrelated works) could plausibly
+    cause the year/vote ranking in `find_matches()` to pick the wrong
+    entry. This needs verification against the real `imdb.sqlite`, which
+    this sandbox does not have; flagged for follow-up rather than
+    guessed at blind.
+  - Added `tests/test_title_cleanup.py`, a database-free regression test
+    covering all 10 reported titles plus the "Disclosure" false-positive
+    and the multi-title-disc no-match case. The existing
+    `tests/test_imdb_matcher.py` regression cases were re-verified by
+    hand (string-level, no database available in this environment) to
+    still clean identically to before this change.
+
 - Fixed `scripts/build_excel_template.ps1` failing with "Unable to get the
   Open property of the Workbooks class" when opening
   `excel/MediaCatalog_template.xlsx`. This is the standard symptom of
