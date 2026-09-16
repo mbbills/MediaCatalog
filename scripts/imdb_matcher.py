@@ -126,6 +126,12 @@ def clean_release_name(text):
         "digibook",
         "digipack",
         "steelbook",
+        "director's cut",
+        "extended cut",
+        "theatrical cut",
+        "unrated cut",
+        "final cut",
+        "archive collection",
     )
 
     # Matched as whole words/phrases, not substrings -- otherwise "disc"
@@ -277,10 +283,13 @@ def detect_season(text):
         r"(?:\s*[:-]\s*|\s+)"
         r"(?:The\s+Complete\s+|Complete\s+)?"
         r"Season\s+(?P<number>\d+|" + SEASON_WORD_PATTERN + r")\b.*$",
-        # Seventh Season; The Complete Ninth Season; The Second Season
+        # Seventh Season; The Complete Ninth Season; The Second Season;
+        # The Eighth and Final Season
         r"(?:\s*[:-]\s*|\s+)"
         r"(?:The\s+Complete\s+|Complete\s+|The\s+)?"
-        r"(?P<number>" + SEASON_WORD_PATTERN + r")\s+Season\b.*$",
+        r"(?P<number>" + SEASON_WORD_PATTERN + r")"
+        r"(?:\s+and\s+(?:Final|Last))?"
+        r"\s+Season\b.*$",
     )
 
     for pattern in patterns:

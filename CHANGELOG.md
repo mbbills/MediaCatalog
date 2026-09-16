@@ -2,6 +2,63 @@
 
 ## Unreleased
 
+- Fixed two more real-title cleanup gaps found in a second batch of
+  failing Blu-ray.com titles:
+  - `detect_season()` required a season ordinal to be immediately
+    followed by "Season" (e.g. "Eighth Season"), so "The Eighth and
+    Final Season" (a common final-season phrasing) wasn't recognized as
+    a season release at all. Now tolerates an optional "and Final"/"and
+    Last" between the ordinal and "Season".
+  - "Director's Cut" and "Warner Archive Collection" -- both real,
+    recurring Blu-ray.com packaging/label phrases -- weren't in the
+    packaging-word list, so parentheticals containing them survived
+    cleanup intact (e.g. `"Dark City Blu-ray (Director's Cut) (1998)"`
+    stayed as `"Dark City Blu-ray (Director's Cut)"` instead of "Dark
+    City"). This also indirectly fixed a related case: a bare trailing
+    format word (the earlier "Blu-ray"/"DVD" fix) only got stripped when
+    it was already at the very end of the string, so it was missed
+    whenever a still-unrecognized parenthetical came after it. Once the
+    parenthetical is now correctly recognized as clutter and removed,
+    the format word ends up trailing and gets stripped as before -- no
+    separate architecture change was needed once the packaging-word gap
+    itself was closed. Added "extended cut", "theatrical cut", "unrated
+    cut", and "final cut" alongside "director's cut" since they're the
+    same category of clutter and equally unambiguous.
+  - Extended `tests/test_title_cleanup.py` with both new cases (14
+    total).
+  - Confirmed NOT fixable by cleanup, and deliberately left alone --
+    these are title *alias* mismatches or source-data typos, not
+    clutter, and no safe general regex removes them without risking
+    false positives on real titles:
+    - `"Highlander 2: Renegade Version (1991)"` -- "Renegade Version" is
+      real branding for a specific home-video cut of the film, but
+      IMDb's title is "Highlander II: The Quickening"; there's no
+      generic "cut name" text to strip that gets you there.
+    - `"Clue: The Movie (1985)"` -- IMDb's title is just "Clue"; but
+      other real titles legitimately keep an exact ": The Movie" suffix
+      on IMDb (e.g. "Digimon: The Movie"), so blindly stripping it would
+      trade one failure mode for another.
+    - `"Kung Fu Panda Holiday Special (2010)"` -- same shape of problem;
+      IMDb's title is "Kung Fu Panda Holiday" without "Special", but
+      "Special" is too common a word to safely strip in general.
+    - `"Enterprise - The Complete Second Season (2002-2003)"` -- season
+      detection itself now works correctly (series "Enterprise", season
+      2), but IMDb's actual primary title is "Star Trek: Enterprise";
+      Blu-ray.com's shortened franchise name won't exact-match it. Same
+      class of problem as the two above.
+    - `"Gentlemen Prefer Blonds"` -- this is a typo in the source title
+      itself (the real film and IMDb title is "Gentlemen Prefer
+      Blondes"); not a cleanup defect at all, and exact-title matching
+      can't be expected to absorb a misspelling.
+    - `"Father of the Bride 2 (1995)"` cleaned correctly with no changes
+      needed -- included as a verified sanity check, not a bug report.
+    All five of the alias/typo cases above share a fix shape that's
+    different from everything fixed so far: they'd need either an
+    explicit alias table (known alternate/marketing title -> canonical
+    IMDb title) or a fuzzy-matching fallback, not another packaging-word
+    or regex tweak. Worth scoping as its own follow-up rather than
+    folding into more cleanup-regex patches.
+
 - Fixed `imdb_matcher.clean_release_name()` leaving product/packaging
   clutter in the search title, causing exact-title IMDb matching to miss
   releases that should have resolved cleanly. Found via a batch of real

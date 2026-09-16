@@ -63,6 +63,30 @@ CLEAN_CASES = [
         "Breaking Bad",
         2008,
     ),
+    (
+        "Dark City Blu-ray (Director's Cut) (1998)",
+        "Dark City",
+        1998,
+    ),
+    (
+        "Young Catherine DVD (Warner Archive Collection) (1991)",
+        "Young Catherine",
+        1991,
+    ),
+]
+
+# (raw release title, expected series title, expected season number)
+SEASON_CASES = [
+    (
+        "Enterprise - The Complete Second Season (2002-2003)",
+        "Enterprise",
+        2,
+    ),
+    (
+        "Psych: The Eighth and Final Season (2014)",
+        "Psych",
+        8,
+    ),
 ]
 
 
@@ -94,6 +118,24 @@ def check_packaging_word_uses_whole_word_matching():
     assert cleaned == "Some Movie (Disclosure Cut)", cleaned
 
 
+def check_season_cases():
+    for raw_name, expected_series, expected_season in SEASON_CASES:
+        cleaned = clean_release_name(raw_name)
+        series_title, season_number = detect_season(cleaned)
+
+        assert series_title is not None, (
+            f"{raw_name!r} was not detected as a season release"
+        )
+        assert normalize_title(series_title) == normalize_title(expected_series), (
+            f"{raw_name!r} series title {series_title!r}, "
+            f"expected {expected_series!r}"
+        )
+        assert season_number == expected_season, (
+            f"{raw_name!r} season {season_number!r}, "
+            f"expected {expected_season!r}"
+        )
+
+
 def check_multi_title_bonus_disc_is_left_unmatched():
     """
     A disc that covers more than one film has no single correct IMDb
@@ -108,9 +150,11 @@ def check_multi_title_bonus_disc_is_left_unmatched():
 
 def main():
     check_cleanup_cases()
+    check_season_cases()
     check_packaging_word_uses_whole_word_matching()
     check_multi_title_bonus_disc_is_left_unmatched()
-    print(f"PASS: {len(CLEAN_CASES)} title-cleanup regression cases")
+    total = len(CLEAN_CASES) + len(SEASON_CASES)
+    print(f"PASS: {total} title-cleanup regression cases")
 
 
 if __name__ == "__main__":
