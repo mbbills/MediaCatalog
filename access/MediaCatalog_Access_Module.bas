@@ -536,3 +536,328 @@ FatalError:
     errorText = Err.Description
     Resume CleanupAndShowError
 End Function
+
+
+' ============================================================================
+' Resolve Selected Records (Phase 3: batch resolver, Excel/Calc's "Resolve
+' Selected Rows" equivalent for a Datasheet-view multi-row selection)
+' ============================================================================
+
+' Triggered from frmMediaCatalogTools's button (Datasheet view has no
+' header/footer section to put a button on, so it can't live on the
+' datasheet form itself). Reads the user's row selection from
+' frmMediaCatalogDatasheet by name -- not Screen.ActiveForm, which at the
+' moment this runs is frmMediaCatalogTools itself, not the datasheet the
+' user actually selected rows in.
+'
+' Selected records are correlated to resolve_rows.py's per-row TSV output
+' by their table ID (AutoNumber primary key), not a spreadsheet-style row
+' number: unlike Excel/Calc, a "selected row" here has no fixed position
+' to return to (a Datasheet's sort/filter can differ between the read and
+' write phases, and unlike a bound form's own current record, there's no
+' single Form.Recordset naturally addressed by field name to write
+' through). Both the read and write phases use a fresh DAO.Recordset,
+' never Form.Controls -- see ResolveCurrentRecord's own header comment
+' for why that lookup is not trusted for field access in this project.
+Public Sub ResolveSelectedRecords()
+    Dim errorText As String
+    Dim dsForm As Form
+    Dim rsSource As DAO.Recordset
+    Dim rsTable As DAO.Recordset
+    Dim selTop As Long
+    Dim selHeight As Long
+    Dim rowId As Long
+    Dim rowCount As Long
+    Dim upc As String
+    Dim blurayUrl As String
+    Dim releaseTitle As String
+    Dim imdbUrl As String
+    Dim imdbId As String
+    Dim canonicalTitle As String
+    Dim season As String
+    Dim rootPath As String
+    Dim pythonCommand As String
+    Dim scriptPath As String
+    Dim inputPath As String
+    Dim outputPath As String
+    Dim inputText As String
+    Dim commandLine As String
+    Dim standardOutput As String
+    Dim standardError As String
+    Dim exitCode As Long
+    Dim lines As Variant
+    Dim lineIndex As Long
+    Dim fields As Variant
+    Dim recordId As Long
+    Dim statusText As String
+    Dim resolved As Long
+    Dim partial As Long
+    Dim review As Long
+    Dim cancelled As Long
+    Dim skipped As Long
+    Dim failed As Long
+
+    On Error GoTo FatalError
+
+    On Error Resume Next
+    Set dsForm = Forms("frmMediaCatalogDatasheet")
+    On Error GoTo 0
+    If dsForm Is Nothing Then
+        MsgBox "Open frmMediaCatalogDatasheet, select one or more rows, then try again.", _
+               vbInformation, "MediaCatalog"
+        Exit Sub
+    End If
+
+    ' Bring the datasheet to the foreground so its SelTop/SelHeight
+    ' reflect the user's actual on-screen selection before reading them.
+    dsForm.SetFocus
+    If dsForm.Dirty Then dsForm.Dirty = False
+
+    selTop = dsForm.SelTop
+    selHeight = dsForm.SelHeight
+    If selHeight <= 0 Then
+        MsgBox "Select one or more rows in frmMediaCatalogDatasheet first.", vbInformation, "MediaCatalog"
+        Exit Sub
+    End If
+
+    Set rsSource = dsForm.RecordsetClone
+    If rsSource.RecordCount = 0 Then
+        MsgBox "No records to resolve.", vbInformation, "MediaCatalog"
+        Exit Sub
+    End If
+    rsSource.MoveFirst
+    If selTop > 1 Then rsSource.Move selTop - 1
+
+    rowCount = 0
+
+    ' Same input header/field order resolve_rows.py expects from
+    ' Excel/Calc, except "row" here is each record's real ID, not a
+    ' spreadsheet row number.
+    inputText = "row" & vbTab & "upc" & vbTab & "bluray_url" & vbTab & _
+                "release_title" & vbTab & "imdb_url" & vbTab & "imdb_id" & vbTab & _
+                "title" & vbTab & "season" & vbCrLf
+
+    Do While rowCount < selHeight And Not rsSource.EOF
+        rowCount = rowCount + 1
+        rowId = rsSource.Fields("ID").Value
+
+        upc = Trim$(Nz(rsSource.Fields("UPC").Value, ""))
+        blurayUrl = Trim$(Nz(rsSource.Fields("Blu-ray com URL").Value, ""))
+        releaseTitle = Trim$(Nz(rsSource.Fields("Blu-ray com Title").Value, ""))
+        imdbUrl = Trim$(Nz(rsSource.Fields("IMDb URL").Value, ""))
+        imdbId = Trim$(Nz(rsSource.Fields("IMDb ID").Value, ""))
+        canonicalTitle = Trim$(Nz(rsSource.Fields("IMDb Title").Value, ""))
+        If IsNull(rsSource.Fields("Season").Value) Then
+            season = ""
+        Else
+            season = CStr(rsSource.Fields("Season").Value)
+        End If
+
+        inputText = inputText & CStr(rowId) & vbTab & TsvField(upc) & vbTab & _
+                    TsvField(blurayUrl) & vbTab & TsvField(releaseTitle) & vbTab & _
+                    TsvField(imdbUrl) & vbTab & TsvField(imdbId) & vbTab & _
+                    TsvField(canonicalTitle) & vbTab & TsvField(season) & vbCrLf
+
+        rsSource.MoveNext
+    Loop
+    rsSource.Close
+
+    If rowCount = 0 Then
+        MsgBox "No records to resolve.", vbInformation, "MediaCatalog"
+        Exit Sub
+    End If
+
+    pythonCommand = GetPythonCommand(errorText)
+    If Len(errorText) > 0 Then GoTo ShowError
+    pythonCommand = GetWindowlessPythonCommand(pythonCommand, errorText)
+    If Len(errorText) > 0 Then GoTo ShowError
+
+    rootPath = ProjectPath()
+    scriptPath = JoinPath(JoinPath(rootPath, "scripts"), "resolve_rows.py")
+    If Not FileExists(scriptPath) Then
+        errorText = "Integrated resolver was not found:" & vbCrLf & scriptPath
+        GoTo ShowError
+    End If
+
+    inputPath = TemporaryPath("_access_batch_input.tsv")
+    outputPath = TemporaryPath("_access_batch_output.tsv")
+    WriteUtf8Text inputPath, inputText
+
+    commandLine = QuoteArgument(pythonCommand) & " -E " & _
+                  QuoteArgument(scriptPath) & " " & _
+                  QuoteArgument(inputPath) & " " & QuoteArgument(outputPath)
+
+    exitCode = RunCommandAndWait(commandLine, 43200, standardOutput, standardError)
+    If Not FileExists(outputPath) Then
+        errorText = "Integrated resolver failed."
+        If Len(Trim$(standardError)) > 0 Then
+            errorText = errorText & vbCrLf & vbCrLf & Trim$(standardError)
+        End If
+        GoTo CleanupAndShowError
+    End If
+
+    ' As with Excel/Calc/ResolveCurrentRecord: the resolver writes each
+    ' row's result as soon as it is resolved, so a non-zero exit code does
+    ' not by itself mean the output file is empty or unusable -- import
+    ' whatever rows are present instead of discarding a partial batch.
+    If exitCode <> 0 And Len(Trim$(standardError)) > 0 Then
+        errorText = "The integrated resolver did not finish cleanly:" & vbCrLf & Trim$(standardError)
+    End If
+
+    lines = Split(Replace(ReadUtf8Text(outputPath), vbCrLf, vbLf), vbLf)
+
+    Set rsTable = CurrentDb.OpenRecordset("MediaCatalog", dbOpenDynaset)
+
+    For lineIndex = 1 To UBound(lines)
+        If Len(Trim$(CStr(lines(lineIndex)))) > 0 Then
+            fields = Split(CStr(lines(lineIndex)), vbTab)
+            If UBound(fields) >= 24 Then
+                recordId = CLng(fields(0))
+                rsTable.FindFirst "ID = " & recordId
+                If Not rsTable.NoMatch Then
+                    rsTable.Edit
+
+                    ' Field indices match resolve_rows.py's OUTPUT_FIELDS
+                    ' exactly -- see ResolveCurrentRecord's own comment
+                    ' for the full list.
+                    If Len(fields(4)) > 0 Then rsTable.Fields("Blu-ray com URL").Value = fields(4)
+                    If Len(fields(5)) > 0 Then rsTable.Fields("Blu-ray com Title").Value = fields(5)
+
+                    If Len(fields(7)) > 0 Then
+                        rsTable.Fields("IMDb URL").Value = fields(6)
+                        rsTable.Fields("IMDb ID").Value = fields(7)
+                    End If
+                    If Len(fields(8)) > 0 Then
+                        rsTable.Fields("IMDb Title").Value = fields(8)
+                        SetNumberValue rsTable, "Year", CStr(fields(9))
+                        SetNumberValue rsTable, "Runtime", CStr(fields(10))
+                        rsTable.Fields("Title Type").Value = fields(11)
+                        SetNumberValue rsTable, "Season", CStr(fields(12))
+                    End If
+
+                    SetTextIfBlank rsTable, "Studio", CStr(fields(13))
+                    SetNumberIfBlank rsTable, "Blu-ray Year", CStr(fields(14))
+                    SetNumberIfBlank rsTable, "Blu-ray Runtime", CStr(fields(15))
+                    SetTextIfBlank rsTable, "Content Rating", CStr(fields(16))
+                    SetIsoDateIfBlank rsTable, "Physical Release Date", CStr(fields(17))
+                    SetTextIfBlank rsTable, "Disc Format", CStr(fields(18))
+                    SetTextIfBlank rsTable, "Video Codec", CStr(fields(19))
+                    SetTextIfBlank rsTable, "Resolution", CStr(fields(20))
+                    SetTextIfBlank rsTable, "Aspect Ratio", CStr(fields(21))
+                    SetTextIfBlank rsTable, "Disc Count / Capacities", CStr(fields(22))
+
+                    statusText = CStr(fields(1))
+                    If Len(fields(2)) > 0 Then statusText = statusText & ": " & CStr(fields(2))
+                    rsTable.Fields("Status / Error").Value = statusText
+
+                    rsTable.Update
+                End If
+
+                If Left$(CStr(fields(1)), 3) = "OK " Or fields(1) = "OK" Then
+                    resolved = resolved + 1
+                ElseIf Left$(CStr(fields(1)), 7) = "PARTIAL" Then
+                    partial = partial + 1
+                ElseIf Left$(CStr(fields(1)), 12) = "NEEDS REVIEW" Then
+                    review = review + 1
+                ElseIf fields(1) = "CANCELLED" Then
+                    cancelled = cancelled + 1
+                ElseIf Left$(CStr(fields(1)), 7) = "SKIPPED" Then
+                    skipped = skipped + 1
+                Else
+                    failed = failed + 1
+                End If
+            Else
+                failed = failed + 1
+            End If
+        End If
+    Next lineIndex
+
+    rsTable.Close
+    dsForm.Requery
+
+    DeleteTemporaryFile inputPath
+    DeleteTemporaryFile outputPath
+
+    If Len(errorText) > 0 Then
+        MsgBox errorText & vbCrLf & vbCrLf & _
+               "Rows imported before the failure:" & vbCrLf & _
+               "Complete: " & CStr(resolved) & vbCrLf & _
+               "Partial: " & CStr(partial) & vbCrLf & _
+               "Needs review: " & CStr(review) & vbCrLf & _
+               "Cancelled: " & CStr(cancelled) & vbCrLf & _
+               "Skipped: " & CStr(skipped) & vbCrLf & _
+               "Errors: " & CStr(failed), vbExclamation, "MediaCatalog"
+    Else
+        MsgBox "Resolved " & CStr(rowCount) & " record(s)." & vbCrLf & vbCrLf & _
+               "Complete: " & CStr(resolved) & vbCrLf & _
+               "Partial: " & CStr(partial) & vbCrLf & _
+               "Needs review: " & CStr(review) & vbCrLf & _
+               "Cancelled: " & CStr(cancelled) & vbCrLf & _
+               "Skipped: " & CStr(skipped) & vbCrLf & _
+               "Errors: " & CStr(failed), _
+               IIf(review + cancelled + failed > 0, vbExclamation, vbInformation), "MediaCatalog"
+    End If
+
+    Exit Sub
+
+CleanupAndShowError:
+    ' Same reasoning as ResolveCurrentRecord's CleanupAndShowError: no
+    ' stream handle is ever left open here to close before deleting.
+    DeleteTemporaryFile inputPath
+    DeleteTemporaryFile outputPath
+
+ShowError:
+    MsgBox errorText, vbExclamation, "MediaCatalog"
+    Exit Sub
+
+FatalError:
+    errorText = Err.Description
+    Resume CleanupAndShowError
+End Sub
+
+
+' ----------------------------------------------------------------------
+' DAO.Recordset field helpers for ResolveSelectedRecords. Deliberately
+' separate from ResolveCurrentRecord's Write*(frm As Form, ...) helpers
+' above (which operate on a bound form's Recordset) -- these operate on
+' rsTable, a plain DAO.Recordset already in .Edit mode when called, so
+' they never call .Edit/.Update themselves; the caller commits once per
+' record with a single rsTable.Update after all fields are set.
+' ----------------------------------------------------------------------
+
+Private Sub SetTextIfBlank(ByRef rs As DAO.Recordset, ByVal fieldName As String, ByVal value As String)
+    If Len(Trim$(Nz(rs.Fields(fieldName).Value, ""))) = 0 And Len(Trim$(value)) > 0 Then
+        rs.Fields(fieldName).Value = value
+    End If
+End Sub
+
+
+Private Sub SetNumberIfBlank(ByRef rs As DAO.Recordset, ByVal fieldName As String, ByVal value As String)
+    If IsNull(rs.Fields(fieldName).Value) And IsNumeric(value) Then
+        rs.Fields(fieldName).Value = CLng(value)
+    End If
+End Sub
+
+
+Private Sub SetIsoDateIfBlank(ByRef rs As DAO.Recordset, ByVal fieldName As String, ByVal value As String)
+    If Not IsNull(rs.Fields(fieldName).Value) Then Exit Sub
+    If Len(value) <> 10 Then Exit Sub
+    If Mid$(value, 5, 1) <> "-" Or Mid$(value, 8, 1) <> "-" Then Exit Sub
+
+    On Error Resume Next
+    rs.Fields(fieldName).Value = DateSerial( _
+        CInt(Left$(value, 4)), _
+        CInt(Mid$(value, 6, 2)), _
+        CInt(Right$(value, 2)) _
+    )
+    On Error GoTo 0
+End Sub
+
+
+Private Sub SetNumberValue(ByRef rs As DAO.Recordset, ByVal fieldName As String, ByVal value As String)
+    If IsNumeric(value) Then
+        rs.Fields(fieldName).Value = CLng(value)
+    Else
+        rs.Fields(fieldName).Value = Null
+    End If
+End Sub

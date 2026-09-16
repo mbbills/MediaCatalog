@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Access front end phase 3: a "Resolve Selected Records" button (on a new
+  `frmMediaCatalogTools` form) that batch-resolves a multi-row selection
+  made in a new `frmMediaCatalogDatasheet` Datasheet-view form -- the
+  closest Access equivalent to Excel/Calc's spreadsheet row selection.
+  Records are correlated to the resolver's response by their table ID
+  (AutoNumber primary key) rather than a spreadsheet row position. Phase
+  2 confirmed working live in the meantime; see the "Phase 3" section of
+  `access/README.md`. Not yet verified against real Access.
 - Access front end phase 2: a "Resolve Current Record" button running the
   same integrated resolver (`scripts/resolve_rows.py`) Excel/Calc's
   "Resolve Selected Rows" uses, against the current record only (Access

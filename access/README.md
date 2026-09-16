@@ -20,19 +20,22 @@ the project handoff document, section 16.1, for the long-term intent
 See `schema.sql` for the exact field list and types, and the "Field types"
 section below for the reasoning.
 
-**Phase 2** (this round): a **"Resolve Current Record" button** on
-`frmMediaCatalog` that runs the same integrated resolver Excel/Calc call
-"Resolve Selected Rows", against the one record currently open on the
+**Phase 2** (confirmed working live): a **"Resolve Current Record" button**
+on `frmMediaCatalog` that runs the same integrated resolver Excel/Calc's
+"Resolve Selected Rows" uses, against the one record currently open on the
 form. See "Phase 2: Resolve Current Record" below for what it does, its
 dependencies, and its limitations.
+
+**Phase 3** (this round): a **"Resolve Selected Records" button**, on a
+separate small `frmMediaCatalogTools` form, that resolves a multi-row
+selection made in a new `frmMediaCatalogDatasheet` Datasheet-view form --
+the closest Access equivalent to Excel/Calc's spreadsheet row selection.
+See "Phase 3: Resolve Selected Records" below.
 
 ## What's explicitly NOT implemented yet
 
 - The BRdC-only (Blu-ray.com-only) and single-row IMDb-lookup commands --
-  deferred to later phases, one at a time, after Phase 2 is confirmed
-  working live.
-- Multi-record / batch resolution -- Phase 2 is current-record-only; see
-  "Phase 2: Resolve Current Record" for why.
+  deferred to later phases, one at a time.
 - No import/export script (CSV, or from the Excel/Calc catalogs).
 - No reports.
 - No parent/child (box-set) schema.
@@ -44,8 +47,8 @@ dependencies, and its limitations.
 | File | Purpose |
 |---|---|
 | `schema.sql` | The canonical `CREATE TABLE` statement (Jet/ACE SQL). Hand-maintained source of truth for the schema. |
-| `MediaCatalog_Access_Module.bas` | Phase 2: the integrated-resolver VBA module (`ResolveCurrentRecord` and its helpers), ported from Excel's `ResolveSelectedRows`. Imported into the `.accdb`'s VBA project by the build script. |
-| `build_access_database.vbs` | Automation script that creates a fresh `MediaCatalog.accdb`, runs `schema.sql` against it, imports `MediaCatalog_Access_Module.bas`, and builds `frmMediaCatalog` (including the Phase 2 button). |
+| `MediaCatalog_Access_Module.bas` | The integrated-resolver VBA module (`ResolveCurrentRecord`, Phase 2; `ResolveSelectedRecords`, Phase 3; and their helpers), ported from Excel's `ResolveSelectedRows`. Imported into the `.accdb`'s VBA project by the build script. |
+| `build_access_database.vbs` | Automation script that creates a fresh `MediaCatalog.accdb`, runs `schema.sql` against it, imports `MediaCatalog_Access_Module.bas`, and builds `frmMediaCatalog`, `frmMediaCatalogDatasheet`, and `frmMediaCatalogTools`. |
 | `MediaCatalog.accdb` | **Not included in this repository.** See below. |
 
 ## Why there's no `.accdb` file checked in yet
@@ -297,18 +300,108 @@ rather than inventing an Access-only one:
 
 ### Known limitations
 
-- **Current record only** -- see above.
+- **Current record only** -- for resolving several records at once, see
+  "Phase 3: Resolve Selected Records" below.
 - No progress/cancel window (Excel/Calc's integrated resolver shows one
   via `job_progress.py`'s `run_with_progress`); a single record resolves
   quickly enough that this wasn't judged necessary for this phase, but a
   long-running Blu-ray.com lookup will make Access appear to "hang" (it
   isn't -- `DoEvents` runs during the poll loop, so the form stays
   responsive to Windows messages, but there's no visual feedback that
-  work is in progress).
+  work is in progress). **Confirmed live**: a real run took longer than
+  expected with no progress indicator and looked stalled; it wasn't --
+  give it time before assuming something is wrong.
 - No cancellation.
 - Whatever else "Resolve Selected Rows" doesn't do either (BRdC-only
   fallback, box-set/hierarchy awareness, etc.) -- this is a straight port
   of that command's behavior, not an enhancement of it.
+
+## Phase 3: Resolve Selected Records
+
+### What it does
+
+Access has no spreadsheet-style "select several rows" gesture on a normal
+bound form -- but it does on a form in **Datasheet view**, which behaves
+like an Excel/Calc grid (click a row selector, Shift/Ctrl-click or drag to
+extend the selection). That view can't host a command button, though: in
+Datasheet view, Access renders only the grid -- a form's Header/Footer/
+Detail sections (where buttons normally live) don't appear at all. So this
+phase adds two new forms instead of one:
+
+- **`frmMediaCatalogDatasheet`** -- the `MediaCatalog` table in Datasheet
+  view. Select the records to resolve here.
+- **`frmMediaCatalogTools`** -- a small form with just the **"Resolve
+  Selected Records"** button. Keep it open alongside the datasheet (e.g.
+  side by side, or one in front of the other); clicking its button reads
+  the selection from `frmMediaCatalogDatasheet` *by name*, not from
+  whichever window currently has focus -- clicking a button always makes
+  its own form the active one, so "the active form" would just be the
+  tools form itself, never the datasheet.
+
+Clicking the button:
+
+1. Requires `frmMediaCatalogDatasheet` to be open (shows a message and
+   stops if it isn't), brings it to the foreground so its selection state
+   is current, and reads which rows are selected (`SelTop`/`SelHeight`).
+2. Builds **one batch TSV** covering every selected record (not one
+   resolver call per record) -- same input contract as Phase 2, except
+   the `row` value sent to `resolve_rows.py` is each record's real `ID`
+   (the table's AutoNumber primary key), not a position. This is a
+   deliberate difference from Excel/Calc's spreadsheet row numbers: a
+   selected *record* has no fixed position to return to the way a
+   spreadsheet row does (sorting/filtering the datasheet between the read
+   and write phases would silently corrupt a position-based approach),
+   but every record has a stable ID regardless.
+3. Runs `resolve_rows.py` once against the whole batch (same Shell/poll
+   pattern as Phase 2), then for each line of its response, looks up the
+   matching record **by ID** via a fresh `DAO.Recordset` (`FindFirst`/
+   `Edit`/`Update`) and writes its fields back -- same overwrite-always
+   vs. overwrite-if-blank policy, same numeric/date parsing, same status
+   vocabulary as Phase 2 (see "Phase 2: Resolve Current Record" above;
+   not repeated or changed here).
+4. Requeries `frmMediaCatalogDatasheet` so the results are visible, then
+   shows a summary message box with per-status counts (Complete, Partial,
+   Needs review, Cancelled, Skipped, Errors) -- the same style of summary
+   Excel/Calc's integrated resolver shows, not Phase 2's single-status
+   message (there's more than one result to report now).
+
+### Why a separate form pair instead of one combined UI
+
+Considered and rejected:
+
+- **Making `frmMediaCatalog` itself switchable to Datasheet view**: Access
+  does support this (View menu / `Ctrl+.`), but there'd be nowhere for a
+  "Resolve Selected Records" button to live while in that view for the
+  same header/footer-section reason above, so a second form/button was
+  needed regardless.
+- **A keyboard shortcut (AutoKeys macro) instead of a second form**: would
+  avoid needing `frmMediaCatalogTools` at all, but creating a Macro object
+  via automation uses a different, less-proven API
+  (`Application.SaveAsText`/`LoadFromText`) than anything already working
+  in this project (`CreateForm`/`CreateControl`), and this project has
+  already needed two live-tested rounds to get `CreateForm`/`CreateControl`
+  right. The two-form approach reuses only already-proven techniques.
+
+### Dependencies
+
+Same as Phase 2 (`settings.ini`, `scripts\resolve_rows.py`, the Shell/poll
+pattern, the VBA project trust setting) -- nothing new.
+
+### Known limitations
+
+- Selection must be **contiguous** (`SelTop`/`SelHeight` describe one
+  range of rows, the same model Access's own Datasheet view enforces --
+  Ctrl-clicking to select a *non-contiguous* set of rows is not something
+  Access's own row selectors support in the first place, so this isn't a
+  restriction beyond what the UI already allows).
+- Both forms must be open (`frmMediaCatalogDatasheet` with something
+  selected, `frmMediaCatalogTools` to click the button) -- there's no
+  single combined window for this workflow.
+- Same "no progress/cancel window" limitation as Phase 2, more noticeable
+  here since a batch of records takes proportionally longer.
+- Whatever else "Resolve Selected Rows" doesn't do either -- see Phase 2's
+  own "Known limitations" for the full list; this phase doesn't add or
+  remove any of it, only the selection/batching mechanism around it.
 
 ## Verified vs. not verified
 
@@ -413,18 +506,13 @@ Verified in this environment:
 - The project's Python test suite (`tests/`) still passes unchanged --
   Phase 2 touched no Python code.
 
-Not verified at all:
-- That the VBA module actually imports successfully via
-  `VBE.ActiveVBProject.VBComponents.Import` (a new automation call this
-  phase adds -- the button-creation calls were already proven live-safe
-  last phase, but this one hasn't been exercised).
-- That the button's `OnClick = "=ResolveCurrentRecord()"` expression
-  binding actually reaches the imported module's function.
-- That `Screen.ActiveForm`, `frm.Controls("...")`, `Me.Dirty`, and the
-  rest of the Access object model calls inside `ResolveCurrentRecord`
-  behave as expected against a real bound form and a real Integer/Date
-  field.
-- That the resolver actually runs end-to-end and writes correct data back.
+**Phase 2 is now confirmed working live**: the build succeeded, the
+button reached `ResolveCurrentRecord`, `VBComponents.Import` worked,
+`Screen.ActiveForm`/`frm.Controls("...")`/`Me.Dirty` all behaved as
+expected against a real bound form, and the resolver ran end-to-end and
+wrote correct data back (the one live surprise was cosmetic -- see
+"Known limitations" above, not a defect). Every "not verified" item from
+that first Phase 2 release is now verified.
 
 ### How to test Phase 2
 
@@ -461,3 +549,86 @@ Not verified at all:
 7. Worth also trying a record with only an `IMDb ID` filled in (no UPC),
    to exercise the IMDb-only path, and an empty record (should show the
    "nothing to resolve from" message and do nothing else).
+
+### Phase 3 (Resolve Selected Records): what's verified vs. not
+
+Entirely unverified against real Access -- same constraint as Phase 2 was
+before its own live testing.
+
+Verified in this environment:
+- `MediaCatalog_Access_Module.bas`'s block structure (12
+  `Sub`/`End Sub` and 12 `Function`/`End Function` pairs, counted
+  precisely with a small script rather than eyeballed) and a full manual
+  re-read of `ResolveSelectedRecords` and its `DAO.Recordset` helpers.
+- All field reads/writes go through `rsSource.Fields("...")` /
+  `rsTable.Fields("...")` (plain DAO field access by name), never
+  `Controls("...")` or bang-bracket syntax -- sidestepping both of the
+  control-lookup and syntax concerns raised earlier in this document.
+- `build_access_database.vbs`'s two new form-building Subs
+  (`BuildDatasheetForm`, `BuildToolsForm`) follow the same
+  "only-required-arguments" `CreateControl`/`CreateForm` discipline as
+  every other control this script creates. Checked with the same
+  heuristic checker (clean: zero comma-gap arguments anywhere in either
+  file, block counts balanced) and the same JS-based VBScript engine stub
+  (executes the whole updated build script end-to-end and creates exactly
+  the expected 3 forms and 46 controls).
+- The project's Python test suite still passes unchanged.
+
+Not verified at all, and inherently *can't* be checked by the JS-engine
+stub the way the build script's own structure can (the stub has no model
+of Access's own intrinsic `Forms`/`Screen`/`CurrentDb`/`DAO` object model
+-- only external `CreateObject` calls can be stubbed):
+- That `frmMediaCatalogDatasheet` actually opens in Datasheet view and
+  lets the user select multiple rows the way described.
+- That `Forms("frmMediaCatalogDatasheet")`, `.SetFocus`,
+  `.SelTop`/`.SelHeight`, and `.RecordsetClone` behave as expected against
+  a real Datasheet-view form and a real multi-row selection.
+- That `CurrentDb.OpenRecordset(...)`, `.FindFirst "ID = " & recordId`,
+  `.Edit`, and `.Update` correctly locate and update the right records.
+- That the batch resolver call and per-record write-back actually produce
+  correct results across more than one record.
+
+### How to test Phase 3
+
+1. Rebuild: `cscript access\build_access_database.vbs .` -- should now
+   also report creating `frmMediaCatalogDatasheet` and
+   `frmMediaCatalogTools`, alongside everything Phases 1-2 already did.
+2. In `MediaCatalog.accdb`, add at least 2-3 records via `frmMediaCatalog`
+   (Phase 1/2's form) if there aren't already some -- e.g. **UPC
+   `031398108450`** (from the Phase 2 test) plus one or two more,
+   left unresolved (blank `Status / Error`).
+3. Open `frmMediaCatalogDatasheet`. Confirm it opens directly in
+   Datasheet view (a grid, not the single-record layout).
+4. Select 2 or more rows using their row selectors (click the leftmost
+   gray bar of one row, then Shift-click another to extend the
+   selection).
+5. Without closing the datasheet, also open `frmMediaCatalogTools` (it
+   can overlap/tile with the datasheet window) and click **"Resolve
+   Selected Records"**.
+6. **What success looks like**: after a pause (proportionally longer than
+   Phase 2's single-record wait, and again with no progress indicator --
+   see "Known limitations" above), a message box reports something like
+   `Resolved 3 record(s).` followed by the same per-status counts
+   Excel/Calc's integrated resolver shows (Complete/Partial/Needs
+   review/Cancelled/Skipped/Errors), and switching back to
+   `frmMediaCatalogDatasheet` (it requeries automatically) shows the
+   selected rows' fields filled in and their `Status / Error` columns
+   updated.
+7. **What failure looks like**, and what it means:
+   - "Open frmMediaCatalogDatasheet..." message -> the tools form's
+     button was clicked before the datasheet form was opened, or it was
+     closed; open it, select rows, try again.
+   - "Select one or more rows..." message -> nothing was selected (or the
+     selection was lost) when the button was clicked.
+   - A message box naming a COM/automation error (e.g. about
+     `SelTop`/`SelHeight`, `RecordsetClone`, `OpenRecordset`, or
+     `FindFirst`) -> a real bug in `ResolveSelectedRecords`; please paste
+     the exact message and how many rows were selected.
+   - Some records update but not others in the same batch -> please note
+     which ones (and their `ID` values, visible as a column in the
+     datasheet) so the correlation-by-ID logic can be checked against
+     what actually happened.
+8. Worth also trying: selecting just one row (should behave like Phase
+   2's single-record case, just through the batch code path), and
+   selecting a row that's already fully resolved alongside an unresolved
+   one (confirms the manual-value-preserving fields aren't clobbered).

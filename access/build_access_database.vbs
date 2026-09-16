@@ -3,11 +3,25 @@ Option Explicit
 ' Builds access\MediaCatalog.accdb from source-controlled text:
 '   - schema.sql defines the MediaCatalog table (executed verbatim as DDL).
 '   - MediaCatalog_Access_Module.bas is imported as a standard VBA module
-'     (Phase 2: the integrated resolver, ported from Excel's
-'     ResolveSelectedRows -- see that file's own header comment).
-'   - This script then adds one bound data-entry/browse form via the
-'     classic CreateForm/CreateControl Access automation API, including a
-'     "Resolve Current Record" button wired to that module.
+'     (Phase 2: ResolveCurrentRecord; Phase 3: ResolveSelectedRecords --
+'     see that file's own header comments).
+'   - This script then builds three forms via the classic
+'     CreateForm/CreateControl Access automation API:
+'       frmMediaCatalog          -- Phase 1/2: single-record browse/entry
+'                                    form, with the "Resolve Current
+'                                    Record" button.
+'       frmMediaCatalogDatasheet -- Phase 3: the same table in Datasheet
+'                                    view, for multi-row selection. No
+'                                    controls to create -- Datasheet view
+'                                    auto-generates its grid from
+'                                    RecordSource.
+'       frmMediaCatalogTools     -- Phase 3: a small form with the
+'                                    "Resolve Selected Records" button.
+'                                    Datasheet view has no header/footer
+'                                    section to put a button on, so the
+'                                    button lives here instead and reads
+'                                    the selection from
+'                                    frmMediaCatalogDatasheet by name.
 '
 ' Importing a VBA module via automation requires the same "Trust access to
 ' the VBA project object model" setting as creating the form's controls
@@ -41,6 +55,10 @@ Const acCommandButton = 104
 Const acDetail = 0
 Const acForm = 2
 Const acSaveYes = 1
+' Form.DefaultView's own enumeration (unrelated to, and coincidentally
+' sharing the value 2 with, the acForm AcObjectType constant above used
+' by DoCmd.Close/Rename): 0 Single Form, 1 Continuous Forms, 2 Datasheet.
+Const acFormViewDatasheet = 2
 
 If WScript.Arguments.Count <> 1 Then
     WScript.Echo "Usage: cscript build_access_database.vbs PROJECT_ROOT"
@@ -108,6 +126,8 @@ End If
 On Error GoTo 0
 
 BuildBrowseForm access
+BuildDatasheetForm access
+BuildToolsForm access
 
 access.CloseCurrentDatabase
 access.Quit
@@ -231,6 +251,77 @@ Sub BuildBrowseForm(app)
     On Error Resume Next
     app.DoCmd.Rename "frmMediaCatalog", acForm, finalName
     If Err.Number <> 0 Then Fail "Renaming the form failed: " & Err.Description
+    On Error GoTo 0
+End Sub
+
+
+' Phase 3: the MediaCatalog table in Datasheet view, for multi-row
+' selection (ResolveSelectedRecords reads this form's SelTop/SelHeight).
+' No CreateControl calls needed -- Datasheet view generates its own grid
+' of columns directly from RecordSource, unlike the Detail-section forms
+' above.
+Sub BuildDatasheetForm(app)
+    Dim frm, finalName
+
+    On Error Resume Next
+    Set frm = app.CreateForm()
+    If Err.Number <> 0 Then Fail "CreateForm (datasheet) failed: " & Err.Description
+    On Error GoTo 0
+
+    frm.RecordSource = "MediaCatalog"
+    frm.DefaultView = acFormViewDatasheet
+    frm.Caption = "MediaCatalog (Datasheet)"
+    finalName = frm.Name
+
+    On Error Resume Next
+    app.DoCmd.Close acForm, finalName, acSaveYes
+    If Err.Number <> 0 Then Fail "Saving the datasheet form failed: " & Err.Description
+    On Error GoTo 0
+
+    On Error Resume Next
+    app.DoCmd.Rename "frmMediaCatalogDatasheet", acForm, finalName
+    If Err.Number <> 0 Then Fail "Renaming the datasheet form failed: " & Err.Description
+    On Error GoTo 0
+End Sub
+
+
+' Phase 3: a small form holding only the "Resolve Selected Records"
+' button. Datasheet view (frmMediaCatalogDatasheet, above) has no
+' header/footer section to put a button on, so this separate form is the
+' button's home; ResolveSelectedRecords looks up the datasheet form by
+' name rather than via Screen.ActiveForm, which at the moment this
+' button's OnClick runs is this tools form itself, not the datasheet the
+' user selected rows in.
+Sub BuildToolsForm(app)
+    Dim frm, btn, finalName
+
+    On Error Resume Next
+    Set frm = app.CreateForm()
+    If Err.Number <> 0 Then Fail "CreateForm (tools) failed: " & Err.Description
+    On Error GoTo 0
+
+    On Error Resume Next
+    Set btn = app.CreateControl(frm.Name, acCommandButton, acDetail)
+    If Err.Number <> 0 Then Fail "CreateControl (Resolve Selected Records button) failed: " & Err.Description
+    On Error GoTo 0
+    btn.Caption = "Resolve Selected Records"
+    btn.OnClick = "=ResolveSelectedRecords()"
+    btn.Left = 100
+    btn.Top = 100
+    btn.Width = 3200
+    btn.Height = 350
+
+    frm.Caption = "MediaCatalog Tools"
+    finalName = frm.Name
+
+    On Error Resume Next
+    app.DoCmd.Close acForm, finalName, acSaveYes
+    If Err.Number <> 0 Then Fail "Saving the tools form failed: " & Err.Description
+    On Error GoTo 0
+
+    On Error Resume Next
+    app.DoCmd.Rename "frmMediaCatalogTools", acForm, finalName
+    If Err.Number <> 0 Then Fail "Renaming the tools form failed: " & Err.Description
     On Error GoTo 0
 End Sub
 
