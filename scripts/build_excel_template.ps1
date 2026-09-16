@@ -10,6 +10,25 @@ if ($ExcelProcesses.Count -gt 0) {
     throw "Close every open Excel window and run install.cmd again."
 }
 
+# Files extracted from a downloaded ZIP (or otherwise carrying a Mark of
+# the Web) open in Protected View, which shows a banner Excel can't
+# display -- and therefore can't get past -- while Application.Visible is
+# False for this unattended build. That specific failure surfaces as
+# "Unable to get the Open property of the Workbooks class" from
+# Workbooks.Open, with no mention of Protected View at all. Unblocking
+# these files first (removing that flag) is harmless when it isn't the
+# cause and fixes it when it is.
+$FilesToUnblock = @(
+    (Join-Path $ProjectRoot "excel\MediaCatalog_template.xlsx"),
+    (Join-Path $ProjectRoot "excel\MediaCatalog_Excel_Module.bas"),
+    (Join-Path $ProjectRoot "excel\ThisWorkbook_Code.txt")
+)
+foreach ($FileToUnblock in $FilesToUnblock) {
+    if (Test-Path $FileToUnblock) {
+        Unblock-File -Path $FileToUnblock -ErrorAction SilentlyContinue
+    }
+}
+
 $SecurityKey = "HKCU:\Software\Microsoft\Office\16.0\Excel\Security"
 $PropertyName = "AccessVBOM"
 $KeyExisted = Test-Path $SecurityKey

@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Fixed `scripts/build_excel_template.ps1` failing with "Unable to get the
+  Open property of the Workbooks class" when opening
+  `excel/MediaCatalog_template.xlsx`. This is the standard symptom of
+  Protected View blocking an invisible (`Application.Visible = False`)
+  Excel automation session: Excel can't show the "this file was
+  downloaded from the Internet" banner, so `Workbooks.Open` fails outright
+  instead of prompting. Files can pick up that Mark-of-the-Web flag when
+  the repository is obtained as a downloaded/extracted ZIP rather than a
+  plain `git clone`. The script now runs `Unblock-File` on the Excel
+  source files it touches before invoking the VBScript builder.
+  Reasoned from the documented error class and code review; not
+  verified against real Excel -- please re-run `install.cmd` and confirm.
 - Added `install.cmd`/`install_media_catalog.py --skip-database`, to
   reconfigure `settings.ini` or rebuild a template without touching
   `data/imdb.sqlite` at all. The already-existing "don't redownload/rebuild
