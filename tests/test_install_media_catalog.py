@@ -1,6 +1,7 @@
 import gzip
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 
@@ -8,6 +9,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
+import install_media_catalog as installer
 from config import load_settings_files
 from install_media_catalog import update_runtime_python, validate_dataset
 
@@ -65,7 +67,67 @@ def main():
             b"tconst\taverageRating\tnumVotes",
         )
 
+        # install.cmd offers to skip the IMDb database step entirely, and
+        # wires the choice through to install_media_catalog.py's
+        # --skip-database flag.
+        assert "Check/build the IMDb database now?" in install_cmd
+        assert "--skip-database" in install_cmd
+
+        check_skip_unnecessary_rebuild(temp)
+
     print("PASS: installer settings preservation and dataset validation")
+
+
+def check_skip_unnecessary_rebuild(temp):
+    """A second install run must not re-download or rebuild anything that
+    is already present and valid -- this is what --skip-database exists
+    to guarantee explicitly, but it should already be true implicitly."""
+    original_root = installer.PROJECT_ROOT
+    original_source_dir = installer.SOURCE_DIR
+    original_database_file = installer.DATABASE_FILE
+    try:
+        installer.PROJECT_ROOT = temp
+        installer.SOURCE_DIR = temp / "data" / "source"
+        installer.DATABASE_FILE = temp / "data" / "imdb.sqlite"
+        installer.SOURCE_DIR.mkdir(parents=True, exist_ok=True)
+        installer.DATABASE_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+        dataset_paths = []
+        for filename, header in installer.DATASETS.items():
+            path = installer.SOURCE_DIR / filename
+            with gzip.open(path, "wb", compresslevel=0) as output:
+                output.write(header + b"\n")
+                output.write(b"filler\tdata\trow\n" * 20)
+            assert path.stat().st_size >= 100, (
+                "test dataset must clear validate_dataset's 100-byte floor "
+                "to exercise the real skip path, not the too-small-to-"
+                "validate path"
+            )
+            dataset_paths.append(path)
+
+        installer.DATABASE_FILE.write_bytes(b"fake database contents")
+        time.sleep(0.05)
+
+        assert installer.database_needs_build(dataset_paths, force=False) is False
+        assert installer.database_needs_build(dataset_paths, force=True) is True
+
+        def fail_if_called(*args, **kwargs):
+            raise AssertionError(
+                "download_dataset must not touch the network for an "
+                "already-valid dataset"
+            )
+
+        original_urlopen = installer.urllib.request.urlopen
+        installer.urllib.request.urlopen = fail_if_called
+        try:
+            for filename, header in installer.DATASETS.items():
+                installer.download_dataset(filename, header)
+        finally:
+            installer.urllib.request.urlopen = original_urlopen
+    finally:
+        installer.PROJECT_ROOT = original_root
+        installer.SOURCE_DIR = original_source_dir
+        installer.DATABASE_FILE = original_database_file
 
 
 if __name__ == "__main__":

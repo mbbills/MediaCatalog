@@ -84,15 +84,29 @@ The installer:
 2. if necessary, downloads and installs Python 3.8.10, the final official
    Python release with a Windows 7 installer;
 3. creates the private, Git-ignored `settings.ini`;
-4. checks for `title.basics.tsv.gz`, `title.episode.tsv.gz`, and
-   `title.ratings.tsv.gz`;
-5. downloads missing or invalid datasets from IMDb;
-6. builds or refreshes `data/imdb.sqlite`; and
-7. offers to use Excel 2016 to build `MediaCatalog_template.xlsm` with the
+4. asks whether to check/build the IMDb database now (see below);
+5. if so: checks for `title.basics.tsv.gz`, `title.episode.tsv.gz`, and
+   `title.ratings.tsv.gz`, downloads any that are missing or invalid, and
+   builds or refreshes `data/imdb.sqlite`; and
+6. offers to use Excel 2016 to build `MediaCatalog_template.xlsm` with the
    VBA module and **Media Catalog** menu embedded.
 
-Dataset downloads and the database build are safe to rerun. A failed or
+Dataset downloads and the database build are safe to rerun: an already-valid
+dataset is not redownloaded, and `imdb.sqlite` is not rebuilt unless a
+dataset is newer than it or `--force-database` is passed. A failed or
 cancelled build does not replace a working database.
+
+### Skipping the IMDb database step
+
+Re-running `install.cmd` to reconfigure `settings.ini` or rebuild a
+template doesn't need to touch `data/imdb.sqlite` at all. Answering **N**
+at the "Check/build the IMDb database now?" prompt skips dataset
+validation, download, and build entirely, while still creating/updating
+`settings.ini`. This is the same thing `python -E scripts\install_media_catalog.py
+--skip-database` does directly, if you'd rather not use `install.cmd`'s
+interactive prompt (e.g. from a script). `--force-database` rebuilds
+`imdb.sqlite` even when it looks current; the two flags are mutually
+exclusive.
 
 The Excel template builder temporarily enables programmatic VBA-project access
 for the current user, starts Excel while it is hidden, creates the XLSM, and

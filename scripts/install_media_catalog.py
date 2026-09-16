@@ -173,7 +173,20 @@ def main():
         action="store_true",
         help="Rebuild imdb.sqlite even when it appears current.",
     )
+    parser.add_argument(
+        "--skip-database",
+        action="store_true",
+        help=(
+            "Skip the IMDb dataset/database step entirely -- no dataset "
+            "validation, no download, no build. Existing settings.ini is "
+            "still created/updated. Mutually exclusive with "
+            "--force-database."
+        ),
+    )
     args = parser.parse_args()
+
+    if args.force_database and args.skip_database:
+        parser.error("--force-database and --skip-database cannot both be given")
 
     if sys.version_info < (3, 8):
         raise SystemExit("MediaCatalog requires Python 3.8 or newer")
@@ -182,7 +195,10 @@ def main():
     print("Project folder: {}".format(PROJECT_ROOT))
     check_free_space()
     ensure_settings()
-    build_database(force=args.force_database)
+    if args.skip_database:
+        print("Skipping the IMDb dataset/database step (--skip-database).")
+    else:
+        build_database(force=args.force_database)
 
     print()
     print("MediaCatalog data installation completed successfully.")

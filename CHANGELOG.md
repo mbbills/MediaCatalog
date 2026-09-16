@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added `install.cmd`/`install_media_catalog.py --skip-database`, to
+  reconfigure `settings.ini` or rebuild a template without touching
+  `data/imdb.sqlite` at all. The already-existing "don't redownload/rebuild
+  if unchanged" logic was verified correct and given regression test
+  coverage (it previously had none).
 - Access front end phase 3: a "Resolve Selected Records" button (on a new
   `frmMediaCatalogTools` form) that batch-resolves a multi-row selection
   made in a new `frmMediaCatalogDatasheet` Datasheet-view form -- the
