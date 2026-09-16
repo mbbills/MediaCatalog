@@ -145,18 +145,38 @@ what a user gets by default when opening a bound form in Form view.
 
 ## Verified vs. not verified
 
-Verified in this environment (no Access needed):
+**First real run found a genuine bug**: `CreateControl` was called with a
+skipped `ParentName` argument using VBA's `acDetail, , fields(i)`
+comma-gap idiom. That compiles fine inside a real VBA project, but
+VBScript's late-bound `IDispatch` calls into an external COM object (as
+opposed to VBScript's own intrinsic functions like `MsgBox`, which get
+special compiler support for the same idiom) do not support it, and it
+failed with `Expected end of statement` -- reported on the `Next i` two
+lines later, not on the actual bad line, since that's where the parser's
+recovery gave up. Fixed by passing `Empty` explicitly for that argument
+and moving `Left`/`Top`/`Width`/`Height` to property assignments after
+`CreateControl` returns, instead of passing them positionally, removing
+the only other place a similar gap could have been introduced.
+
+Verified in this environment (still no Access available):
 - `schema.sql` is valid, well-formed Jet/ACE DDL by inspection.
-- `build_access_database.vbs` was reviewed by hand for VBScript syntax
-  errors (balanced `Sub`/`End Sub`, `If`/`End If`, correct `DoCmd.Rename`
-  argument order, etc.).
+- `build_access_database.vbs` was checked with a purpose-built heuristic
+  static analyzer (regex-based: comma-gap arguments in late-bound calls,
+  `As Type`/`ByVal`/`ByRef`/`:=` VBA-only constructs, trailing whitespace
+  after `_` continuations, unbalanced parens and quotes per logical
+  statement, `Sub`/`End Sub` and `For`/`Next` counts) plus a full manual
+  line-by-line re-read after the fix above. No real VBScript interpreter
+  was available to actually execute it (no Windows, and `wine` alone
+  doesn't provide a redistributable `cscript.exe`).
 
 Not verified (no Access, no Windows, no ODBC driver available here):
-- That `build_access_database.vbs` actually runs to completion against a
-  real Access installation.
+- That `build_access_database.vbs` now runs to completion against a real
+  Access installation -- this fixes the specific reported error, but a
+  static check is not the same as a real run.
 - That the resulting form looks/behaves as described.
 - Exact default label width/offset Access chooses for the auto-attached
   labels (cosmetic only).
 
-Please run the build script and report back what actually happens before
-the next phase (resolver integration) begins.
+Please rerun the build script and report back what actually happens
+(including any further errors) before the next phase (resolver
+integration) begins.

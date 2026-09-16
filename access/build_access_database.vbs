@@ -124,14 +124,21 @@ Sub BuildBrowseForm(app)
 
     For i = LBound(fields) To UBound(fields)
         On Error Resume Next
-        Set ctl = app.CreateControl( _
-            frm.Name, acTextBox, acDetail, , fields(i), _
-            textLeft, topPos, textWidth, 250 _
-        )
+        ' VBScript's late-bound IDispatch calls into a COM object (unlike
+        ' its own intrinsic functions, e.g. MsgBox) do not support skipping
+        ' an argument with a bare "," ",": that compiles fine in VBA but is
+        ' a syntax error here. Pass Empty explicitly for the unused
+        ' ParentName slot, and set position/size as properties afterward
+        ' instead of passing them positionally, to avoid the same risk.
+        Set ctl = app.CreateControl(frm.Name, acTextBox, acDetail, Empty, fields(i))
         If Err.Number <> 0 Then
             Fail "CreateControl failed for field '" & fields(i) & "': " & Err.Description
         End If
         On Error GoTo 0
+        ctl.Left = textLeft
+        ctl.Top = topPos
+        ctl.Width = textWidth
+        ctl.Height = 250
         ' CreateControl auto-creates the attached label to the left of the
         ' textbox at its own default offset/width; left untouched here.
         topPos = topPos + rowHeight
