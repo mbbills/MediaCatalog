@@ -109,10 +109,26 @@ WScript.Quit 0
 ' reproduce -- so the fix here is to stop relying on that argument list
 ' shape entirely rather than guess at another variant of it.
 Sub BuildBrowseForm(app)
-    Dim fields, i, topPos, rowHeight, labelLeft, labelWidth, textLeft, textWidth
+    Dim accessFieldNames, displayLabels, i, topPos, rowHeight
+    Dim labelLeft, labelWidth, textLeft, textWidth
     Dim frm, ctl, lbl, finalName
 
-    fields = Array( _
+    ' Must exactly match schema.sql's field names (see the Access-name <->
+    ' spreadsheet-header mapping table in access/README.md), NOT the
+    ' spreadsheet header text: ControlSource below binds a control to a
+    ' field by its real Access name, and "Blu-ray.com URL"/"Blu-ray.com
+    ' Title" are invalid Access field names (Access field names cannot
+    ' contain a period). displayLabels carries the original, prettier
+    ' spreadsheet header text for what the user actually sees on the form.
+    accessFieldNames = Array( _
+        "Inventory Number", "UPC", "Blu-ray com URL", "Blu-ray com Title", _
+        "IMDb URL", "IMDb ID", "IMDb Title", "Year", "Runtime", _
+        "Title Type", "Season", "Status / Error", "Studio", _
+        "Blu-ray Year", "Blu-ray Runtime", "Content Rating", _
+        "Physical Release Date", "Disc Format", "Video Codec", _
+        "Resolution", "Aspect Ratio", "Disc Count / Capacities" _
+    )
+    displayLabels = Array( _
         "Inventory Number", "UPC", "Blu-ray.com URL", "Blu-ray.com Title", _
         "IMDb URL", "IMDb ID", "IMDb Title", "Year", "Runtime", _
         "Title Type", "Season", "Status / Error", "Studio", _
@@ -135,14 +151,14 @@ Sub BuildBrowseForm(app)
 
     frm.RecordSource = "MediaCatalog"
 
-    For i = LBound(fields) To UBound(fields)
+    For i = LBound(accessFieldNames) To UBound(accessFieldNames)
         On Error Resume Next
         Set ctl = app.CreateControl(frm.Name, acTextBox, acDetail)
         If Err.Number <> 0 Then
-            Fail "CreateControl (textbox) failed for field '" & fields(i) & "': " & Err.Description
+            Fail "CreateControl (textbox) failed for field '" & accessFieldNames(i) & "': " & Err.Description
         End If
         On Error GoTo 0
-        ctl.ControlSource = fields(i)
+        ctl.ControlSource = accessFieldNames(i)
         ctl.Left = textLeft
         ctl.Top = topPos
         ctl.Width = textWidth
@@ -151,10 +167,10 @@ Sub BuildBrowseForm(app)
         On Error Resume Next
         Set lbl = app.CreateControl(frm.Name, acLabel, acDetail)
         If Err.Number <> 0 Then
-            Fail "CreateControl (label) failed for field '" & fields(i) & "': " & Err.Description
+            Fail "CreateControl (label) failed for field '" & accessFieldNames(i) & "': " & Err.Description
         End If
         On Error GoTo 0
-        lbl.Caption = fields(i)
+        lbl.Caption = displayLabels(i)
         lbl.Left = labelLeft
         lbl.Top = topPos
         lbl.Width = labelWidth

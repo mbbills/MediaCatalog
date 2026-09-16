@@ -30,13 +30,26 @@
 -- ID is a surrogate AutoNumber primary key; nothing in this phase enforces
 -- uniqueness on Inventory Number or UPC (a box set may have several owned
 -- copies, or no UPC at all -- see the handoff's box-set/collection notes).
+--
+-- Access field names cannot contain a period, "!", "`", "[", or "]", and
+-- cannot start with a leading space. "Blu-ray.com URL" and "Blu-ray.com
+-- Title" -- both taken verbatim from the Excel/Calc canonical header list
+-- in the handoff section 7.2 -- violate this (the period), so they are
+-- named "Blu-ray com URL" and "Blu-ray com Title" here instead (period
+-- dropped, kept as a space, matching every other multi-word field name in
+-- this schema). Every other field name in this table is already
+-- Access-safe and identical to its spreadsheet header text. See the
+-- mapping table in access/README.md for the full Access-name <->
+-- spreadsheet-header correspondence -- this matters for Phase 2, where
+-- the resolver needs to write to the right Access field for each
+-- spreadsheet column.
 
 CREATE TABLE MediaCatalog (
     ID COUNTER PRIMARY KEY,
     [Inventory Number] TEXT(255),
     UPC TEXT(255),
-    [Blu-ray.com URL] TEXT(255),
-    [Blu-ray.com Title] TEXT(255),
+    [Blu-ray com URL] TEXT(255),
+    [Blu-ray com Title] TEXT(255),
     [IMDb URL] TEXT(255),
     [IMDb ID] TEXT(255),
     [IMDb Title] TEXT(255),

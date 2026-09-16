@@ -102,7 +102,7 @@ from an untrusted location:
 ## Field types
 
 - **Identifier-like fields are `TEXT`, never numeric**: `Inventory Number`,
-  `UPC`, `Blu-ray.com URL`, `IMDb URL`, `IMDb ID`. This project has already
+  `UPC`, `Blu-ray com URL`, `IMDb URL`, `IMDb ID`. This project has already
   been bitten twice by numeric-string bugs in Excel and LibreOffice Calc
   (leading zeros silently dropped from UPCs; a movie literally titled
   "1917" turning into a number) -- see `CHANGELOG.md`. Access doesn't have
@@ -125,6 +125,52 @@ from an untrusted location:
   phase enforces uniqueness on `Inventory Number` or `UPC` -- a box set may
   have several owned copies, or no UPC at all (see the handoff's box-set
   notes) -- so neither is a unique/candidate key here.
+
+## Access field names vs. spreadsheet header names
+
+Table creation failed on the first real run: `Blu-ray.com URL` is not a
+valid Access field name (Access field names cannot contain a period).
+Checked every field name in `schema.sql` against Access's actual naming
+restrictions -- no period, `!`, `` ` ``, `[`, or `]`, and no leading space
+-- rather than assuming this was the only one; `Blu-ray.com Title` has the
+same problem and was the only other one that did. Every other field name
+in this schema was already Access-safe and identical to its spreadsheet
+header text.
+
+Both were renamed by replacing the period with a space, matching the
+convention already used for every other multi-word field name in this
+schema (`Content Rating`, `Physical Release Date`, etc.), so the Access
+field name differs from the canonical spreadsheet header for exactly
+these two fields:
+
+| Access field name | Canonical spreadsheet header (Excel/Calc) |
+|---|---|
+| `Blu-ray com URL` | `Blu-ray.com URL` |
+| `Blu-ray com Title` | `Blu-ray.com Title` |
+| *(every other field)* | identical in both |
+
+**This affects more than just `schema.sql`.** `build_access_database.vbs`
+independently hardcodes its own copy of the field list to build the
+browse form (it does not parse `schema.sql`), and had the same "Blu-ray.
+com URL"/"Blu-ray.com Title" strings baked into it -- used both to bind
+each textbox's `ControlSource` (which must match the real Access field
+name) and to caption each label (which can display anything, including
+the period). Fixed by splitting that single list into two parallel
+arrays: `accessFieldNames` (must track `schema.sql` exactly) for
+`ControlSource`, and `displayLabels` (the original, prettier spreadsheet
+header text, period included) for each label's `Caption`. Phase 2, which
+wires up the resolver against this table, needs to use `accessFieldNames`
+-- i.e. the table's real column names -- not the spreadsheet header text,
+for exactly these two fields.
+
+**Safeguard added**: `tests/test_access_schema_names.py` parses
+`schema.sql`'s field list and asserts none of them contain a period, `!`,
+`` ` ``, `[`, `]`, or a leading space, so a third occurrence of this
+mistake (in a future schema edit) is caught by the existing test suite
+instead of by another live Access run. It does not (and cannot, without a
+real Access install) validate anything beyond Access's field-naming
+character restrictions -- reserved-word collisions and the 64-character
+name-length limit are not checked.
 
 ## What the form looks like
 
