@@ -247,6 +247,28 @@ def title_match_candidates(search_title, is_season=False):
         ):
             candidates.append(without_3d)
 
+        # A trailing "- Part 1"/"- Part 2" etc. usually marks how a season
+        # was split across discs/volumes, not part of the IMDb title (e.g.
+        # "Dragons: Riders of Berk - Part 1" -> "Dragons: Riders of Berk").
+        # But "Part N" is sometimes genuinely part of the title itself (e.g.
+        # "Harry Potter and the Deathly Hallows: Part 1" is IMDb's own exact
+        # title), so this is tried only as a fallback, never in place of the
+        # original.
+        without_part = re.sub(
+            r"\s*[-:]\s*Part\s+\d+\s*$",
+            "",
+            search_title,
+            flags=re.IGNORECASE,
+        ).strip()
+        if (
+            without_part
+            and all(
+                normalize_title(without_part) != normalize_title(existing)
+                for existing in candidates
+            )
+        ):
+            candidates.append(without_part)
+
         for candidate in list(candidates):
             match = re.fullmatch(
                 r"(.+?)\s+2\s*:\s*(.+)",

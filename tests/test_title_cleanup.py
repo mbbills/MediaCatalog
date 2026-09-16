@@ -6,7 +6,13 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-from imdb_matcher import clean_release_name, detect_season, extract_year, normalize_title
+from imdb_matcher import (
+    clean_release_name,
+    detect_season,
+    extract_year,
+    normalize_title,
+    title_match_candidates,
+)
 
 
 # Real Blu-ray.com/UPC release titles that were failing to resolve because
@@ -151,6 +157,26 @@ def check_season_cases():
         )
 
 
+def check_trailing_part_number_is_a_fallback_only():
+    """
+    "- Part N" usually marks how a season was split across discs (Dragons:
+    Riders of Berk - Part 1/2), and isn't part of the real IMDb title -- but
+    it sometimes genuinely is (Harry Potter and the Deathly Hallows: Part
+    1/2). It must appear only as a fallback candidate, tried after the
+    full title, never replacing it as the first attempt.
+    """
+    with_part = title_match_candidates("Dragons: Riders of Berk - Part 1")
+    assert with_part[0] == "Dragons: Riders of Berk - Part 1", with_part
+    assert "Dragons: Riders of Berk" in with_part[1:], with_part
+
+    harry_potter = title_match_candidates(
+        "Harry Potter and the Deathly Hallows: Part 1"
+    )
+    assert harry_potter[0] == "Harry Potter and the Deathly Hallows: Part 1", (
+        harry_potter
+    )
+
+
 def check_multi_title_bonus_disc_is_left_unmatched():
     """
     A disc that covers more than one film has no single correct IMDb
@@ -167,6 +193,7 @@ def main():
     check_cleanup_cases()
     check_season_cases()
     check_packaging_word_uses_whole_word_matching()
+    check_trailing_part_number_is_a_fallback_only()
     check_multi_title_bonus_disc_is_left_unmatched()
     total = len(CLEAN_CASES) + len(SEASON_CASES)
     print(f"PASS: {total} title-cleanup regression cases")

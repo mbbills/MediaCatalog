@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- Added a "- Part N" fallback candidate to `title_match_candidates()` for
+  titles like `"Dragons: Riders of Berk - Part 1"`, where "Part N" marks
+  how a season was split across discs/volumes rather than being part of
+  IMDb's actual title (`"Dragons: Riders of Berk"`). This is deliberately
+  a *fallback* candidate only, tried after the full title, not a
+  `clean_release_name()` strip -- "Part N" is sometimes genuinely part of
+  the real IMDb title (`"Harry Potter and the Deathly Hallows: Part 1"`
+  and `"Part 2"` are both real, separate, exact IMDb titles), so
+  unconditionally removing it would have broken those. Verified both
+  directions: the Dragons case now gets `"...Riders of Berk"` as its
+  second candidate, while Harry Potter's exact `"...Part 1"` title stays
+  the untouched first candidate. Also confirmed as correct with no
+  changes needed: `"Father of the Bride 2 (1995)"` (repeat sanity check)
+  and `"Madonna: The Video Collection 93:99 (1993-1999)"` -- the
+  colon-embedded "93:99" is real product-name text, not clutter, and
+  doesn't trigger the "Title 2: Subtitle" candidate rewrite (which
+  requires a literal digit "2" before the colon). Extended
+  `tests/test_title_cleanup.py` with a candidate-list check for both
+  directions of the Part-N fallback.
+
 - Added two more missing packaging phrases to `imdb_matcher`'s
   packaging-word list, found in a third batch of failing titles: "Full
   Screen"/"Wide Screen" as space-separated two-word forms (only the
