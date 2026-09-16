@@ -37,7 +37,26 @@
   trust settings are otherwise fine. Added a one-second settle delay plus
   a 3-attempt retry (1.5s apart) around `Workbooks.Open`, and the error
   message now includes `Err.Number` for further diagnosis if it still
-  fails. Not yet verified against real Excel.
+  fails. Confirmed live: this fixed the template build.
+- Rebuilt `excel/MediaCatalog_template.xlsx`'s Inventory Number column
+  insertion using `openpyxl` instead of hand-edited raw XML. The
+  hand-edited version was internally consistent enough to pass zip/XML
+  well-formedness checks, but comparing it cell-by-cell against a proper
+  rebuild turned up real defects the manual surgery had introduced: the
+  old header cell for UPC kept the leftmost-column border style instead
+  of switching to the interior-column style used by every other header,
+  and (caught while building this replacement, not in the shipped file)
+  a naive column-width shift loses widths on any column whose original
+  `<col>` entry spanned more than one column (e.g. Status/Error and
+  Studio shared one `<col min="11" max="12">` entry; a per-letter copy
+  only carries the width to the first of the two). The regenerated file
+  was verified against the original: all 22 headers, conditional
+  formatting range (now correctly `C2:C1000`), and every column width
+  match the original 21-column layout shifted by one, and it passes the
+  full test suite (`tests/test_templates.py`,
+  `tests/test_desktop_detail_contract.py`,
+  `tests/test_integrated_desktop_contract.py`). Not yet verified against
+  real Excel.
 - Added `install.cmd`/`install_media_catalog.py --skip-database`, to
   reconfigure `settings.ini` or rebuild a template without touching
   `data/imdb.sqlite` at all. The already-existing "don't redownload/rebuild
