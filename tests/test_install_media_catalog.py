@@ -70,7 +70,7 @@ def main():
         # install.cmd offers to skip the IMDb database step entirely, and
         # wires the choice through to install_media_catalog.py's
         # --skip-database flag.
-        assert "Check/build the IMDb database now?" in install_cmd
+        assert "Download and build IMDb database?" in install_cmd
         assert "--skip-database" in install_cmd
 
         check_skip_unnecessary_rebuild(temp)

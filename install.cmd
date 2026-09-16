@@ -78,16 +78,7 @@ echo Using Python: "%MC_PYTHON%"
 
 set "MC_SKIP_DB_FLAG="
 echo.
-echo IMDb database
-echo -------------
-echo MediaCatalog can check for and build/update the local IMDb database
-echo (data\imdb.sqlite) from IMDb's downloadable datasets. This already skips
-echo re-downloading or rebuilding anything that is already present and valid,
-echo but even that check takes a moment and needs the datasets to be readable.
-echo If you already have a working imdb.sqlite and just want to reconfigure
-echo settings.ini or rebuild a template, you can skip this step entirely.
-echo.
-choice /C YN /N /M "Check/build the IMDb database now? [Y/N] "
+choice /C YN /N /M "Download and build IMDb database? [Y/N] "
 if errorlevel 2 set "MC_SKIP_DB_FLAG=--skip-database"
 
 "%MC_PYTHON%" -E "%~dp0scripts\install_media_catalog.py" %MC_SKIP_DB_FLAG%

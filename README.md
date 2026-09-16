@@ -100,7 +100,7 @@ cancelled build does not replace a working database.
 
 Re-running `install.cmd` to reconfigure `settings.ini` or rebuild a
 template doesn't need to touch `data/imdb.sqlite` at all. Answering **N**
-at the "Check/build the IMDb database now?" prompt skips dataset
+at the "Download and build IMDb database?" prompt skips dataset
 validation, download, and build entirely, while still creating/updating
 `settings.ini`. This is the same thing `python -E scripts\install_media_catalog.py
 --skip-database` does directly, if you'd rather not use `install.cmd`'s
