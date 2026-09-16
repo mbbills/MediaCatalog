@@ -28,6 +28,7 @@ Dim textStream, schemaSql
 Dim access
 
 Const acTextBox = 109
+Const acLabel = 100
 Const acDetail = 0
 Const acForm = 2
 Const acSaveYes = 1
@@ -93,13 +94,23 @@ WScript.Echo "Created " & outputDatabase
 WScript.Quit 0
 
 
+' One plain bound form: a vertical stack of label+textbox pairs, one per
+' field, enough to add a UPC and view/edit a row. CreateControl is called
+' with only its required leading arguments (FormName, ControlType,
+' Section); every position/size/binding property is set explicitly
+' afterward, and the label for each field is created as its own separate
+' control rather than relying on ColumnName auto-attaching one. This
+' avoids passing any optional/skipped argument into a late-bound COM call
+' at all -- an earlier version passed ParentName/ColumnName/Left/Top/
+' Width/Height positionally (skipping ParentName, then passing Empty for
+' it), and real Access 2019 rejected both forms at script-compile time
+' with "Expected end of statement", which neither this project's own
+' heuristic checks nor any available offline VBScript tool could
+' reproduce -- so the fix here is to stop relying on that argument list
+' shape entirely rather than guess at another variant of it.
 Sub BuildBrowseForm(app)
-    ' One plain bound form: a vertical stack of label+textbox pairs, one
-    ' per field, enough to add a UPC and view/edit a row. CreateControl's
-    ' ColumnName argument automatically attaches a matching label, so no
-    ' separate label controls are created here.
-    Dim fields, i, topPos, rowHeight, textLeft, textWidth
-    Dim frm, ctl, finalName
+    Dim fields, i, topPos, rowHeight, labelLeft, labelWidth, textLeft, textWidth
+    Dim frm, ctl, lbl, finalName
 
     fields = Array( _
         "Inventory Number", "UPC", "Blu-ray.com URL", "Blu-ray.com Title", _
@@ -110,9 +121,11 @@ Sub BuildBrowseForm(app)
         "Resolution", "Aspect Ratio", "Disc Count / Capacities" _
     )
 
-    rowHeight = 350   ' twips (~0.24in) per row
-    textLeft = 2100   ' twips
-    textWidth = 3200  ' twips
+    rowHeight = 350    ' twips (~0.24in) per row
+    labelLeft = 100    ' twips
+    labelWidth = 1900  ' twips (~1.3in)
+    textLeft = 2100    ' twips
+    textWidth = 3200   ' twips
     topPos = 150
 
     On Error Resume Next
@@ -124,25 +137,31 @@ Sub BuildBrowseForm(app)
 
     For i = LBound(fields) To UBound(fields)
         On Error Resume Next
-        ' VBScript's late-bound IDispatch calls into a COM object (unlike
-        ' its own intrinsic functions, e.g. MsgBox) do not support skipping
-        ' an argument with a bare "," ",": that compiles fine in VBA but is
-        ' a syntax error here. Pass Empty explicitly for the unused
-        ' ParentName slot, and set position/size as properties afterward
-        ' instead of passing them positionally, to avoid the same risk.
-        Set ctl = app.CreateControl(frm.Name, acTextBox, acDetail, Empty, fields(i))
+        Set ctl = app.CreateControl(frm.Name, acTextBox, acDetail)
         If Err.Number <> 0 Then
-            Fail "CreateControl failed for field '" & fields(i) & "': " & Err.Description
+            Fail "CreateControl (textbox) failed for field '" & fields(i) & "': " & Err.Description
         End If
         On Error GoTo 0
+        ctl.ControlSource = fields(i)
         ctl.Left = textLeft
         ctl.Top = topPos
         ctl.Width = textWidth
         ctl.Height = 250
-        ' CreateControl auto-creates the attached label to the left of the
-        ' textbox at its own default offset/width; left untouched here.
+
+        On Error Resume Next
+        Set lbl = app.CreateControl(frm.Name, acLabel, acDetail)
+        If Err.Number <> 0 Then
+            Fail "CreateControl (label) failed for field '" & fields(i) & "': " & Err.Description
+        End If
+        On Error GoTo 0
+        lbl.Caption = fields(i)
+        lbl.Left = labelLeft
+        lbl.Top = topPos
+        lbl.Width = labelWidth
+        lbl.Height = 250
+
         topPos = topPos + rowHeight
-    Next i
+    Next
 
     frm.Caption = "MediaCatalog"
     finalName = frm.Name
@@ -169,7 +188,7 @@ Function StripSqlComments(sql)
         If Left(trimmed, 2) <> "--" Then
             out = out & line & Chr(10)
         End If
-    Next i
+    Next
     StripSqlComments = out
 End Function
 

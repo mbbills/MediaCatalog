@@ -145,38 +145,66 @@ what a user gets by default when opening a bound form in Form view.
 
 ## Verified vs. not verified
 
-**First real run found a genuine bug**: `CreateControl` was called with a
-skipped `ParentName` argument using VBA's `acDetail, , fields(i)`
-comma-gap idiom. That compiles fine inside a real VBA project, but
-VBScript's late-bound `IDispatch` calls into an external COM object (as
-opposed to VBScript's own intrinsic functions like `MsgBox`, which get
-special compiler support for the same idiom) do not support it, and it
-failed with `Expected end of statement` -- reported on the `Next i` two
-lines later, not on the actual bad line, since that's where the parser's
-recovery gave up. Fixed by passing `Empty` explicitly for that argument
-and moving `Left`/`Top`/`Width`/`Height` to property assignments after
-`CreateControl` returns, instead of passing them positionally, removing
-the only other place a similar gap could have been introduced.
+**First real run** found `CreateControl` called with a skipped `ParentName`
+argument using VBA's `acDetail, , fields(i)` comma-gap idiom, which real
+Access rejected at compile time with `Expected end of statement`. That was
+fixed by passing `Empty` explicitly instead of skipping the argument.
+
+**Second real run failed the same way, in the same place**, even after
+that fix. This means the comma-gap diagnosis, while a real defect, either
+wasn't the actual (or wasn't the only) cause. Rather than guess at a
+third variant of the same argument-list shape, `CreateControl` is now
+called with only its three required leading arguments (`FormName`,
+`ControlType`, `Section`) everywhere in this script; every other property
+(`ControlSource`, `Left`, `Top`, `Width`, `Height`, and the label's
+`Caption`) is set explicitly afterward instead of passed positionally,
+and each field's label is now created as its own separate `acLabel`
+control rather than relying on `CreateControl`'s `ColumnName` argument to
+auto-attach one. No call anywhere in the script now passes more than
+three positional arguments or skips any argument.
 
 Verified in this environment (still no Access available):
 - `schema.sql` is valid, well-formed Jet/ACE DDL by inspection.
-- `build_access_database.vbs` was checked with a purpose-built heuristic
-  static analyzer (regex-based: comma-gap arguments in late-bound calls,
-  `As Type`/`ByVal`/`ByRef`/`:=` VBA-only constructs, trailing whitespace
-  after `_` continuations, unbalanced parens and quotes per logical
-  statement, `Sub`/`End Sub` and `For`/`Next` counts) plus a full manual
-  line-by-line re-read after the fix above. No real VBScript interpreter
-  was available to actually execute it (no Windows, and `wine` alone
-  doesn't provide a redistributable `cscript.exe`).
+- Tried two offline VBScript tools against the file, and against a
+  minimal known-bad snippet reproducing the original comma-gap defect, to
+  calibrate how much to trust a clean result from either:
+  - `vbspretty` (npm) parsed and reformatted the known-bad snippet
+    without complaint -- too lenient to trust for this defect class.
+  - `@devscholar/vbs-engine-js` (npm), a real VBScript-to-JS interpreter,
+    also accepted the known-bad snippet via both its `addCode` and
+    `executeStatement` APIs (only failing later, at simulated runtime,
+    with an unrelated "Invalid procedure call" -- not the compile-time
+    error real Access produced). With `WScript`/`Access.Application`
+    stubbed via its `addObject` API, it did execute the *entire* current
+    script end-to-end (with all `On Error Resume Next` guards stripped
+    out, to surface anything they might hide) and created all 44
+    expected controls (22 fields x textbox + label) with no error. Useful
+    as a general structural check, but neither tool models whatever
+    Access-specific compile-time restriction real `cscript.exe` is
+    actually enforcing, so a clean result from either is not proof this
+    is fixed.
+  - A purpose-built regex-based heuristic checker (comma-gap arguments,
+    `As Type`/`ByVal`/`ByRef`/`:=` VBA-only constructs, trailing
+    whitespace after `_` continuations, unbalanced parens/quotes per
+    logical statement, `Sub`/`Function`/`For`-`Next` counts) plus a full
+    manual line-by-line re-read both came back clean on the version that
+    still failed -- which is exactly why the fix this round changes
+    strategy (eliminate the whole risky argument-list shape) rather than
+    hunting for one more token-level mistake the same tools would likely
+    miss again.
+- No real Windows VBScript interpreter (`cscript.exe`) was found or
+  obtainable in this environment; `wine` alone doesn't provide one (it's
+  not a redistributable component of Windows).
 
 Not verified (no Access, no Windows, no ODBC driver available here):
 - That `build_access_database.vbs` now runs to completion against a real
-  Access installation -- this fixes the specific reported error, but a
-  static check is not the same as a real run.
-- That the resulting form looks/behaves as described.
-- Exact default label width/offset Access chooses for the auto-attached
-  labels (cosmetic only).
+  Access installation.
+- That the resulting form looks/behaves as described, including whether
+  each label ends up positioned/sized sensibly next to its textbox now
+  that positioning is fully manual rather than Access's own auto-label
+  default.
 
-Please rerun the build script and report back what actually happens
-(including any further errors) before the next phase (resolver
-integration) begins.
+Please rerun the build script and report back **the full error text
+verbatim, including the line number**, if it fails again -- and if it
+succeeds, what the resulting form actually looks like -- before the next
+phase (resolver integration) begins.
