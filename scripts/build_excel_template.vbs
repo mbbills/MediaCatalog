@@ -33,13 +33,32 @@ excel.Visible = False
 excel.DisplayAlerts = False
 excel.EnableEvents = False
 
+' Excel's COM server can return from CreateObject before its object model
+' (including the Workbooks collection) has finished initializing. Opening
+' a workbook during that window fails with the generic "Unable to get the
+' Open property of the Workbooks class" -- a timing race, not a problem
+' with the file. Give it a moment, and retry a couple of times before
+' giving up.
+WScript.Sleep 1000
+
+Dim openAttempt, openError, openErrorNumber
+Dim maxOpenAttempts
+maxOpenAttempts = 3
 On Error Resume Next
-Set workbook = excel.Workbooks.Open(sourceWorkbook)
-If Err.Number <> 0 Then
-    Dim openError
+For openAttempt = 1 To maxOpenAttempts
+    Err.Clear
+    Set workbook = excel.Workbooks.Open(sourceWorkbook)
+    openErrorNumber = Err.Number
     openError = Err.Description
+    If openErrorNumber = 0 Then Exit For
+    If openAttempt < maxOpenAttempts Then WScript.Sleep 1500
+Next
+
+If openErrorNumber <> 0 Then
+    On Error GoTo 0
     excel.Quit
-    Fail "The source workbook could not be opened: " & openError
+    Fail "The source workbook could not be opened after " & maxOpenAttempts & _
+        " attempt(s) (error " & openErrorNumber & "): " & openError
 End If
 
 Set component = workbook.VBProject.VBComponents.Import(moduleFile)

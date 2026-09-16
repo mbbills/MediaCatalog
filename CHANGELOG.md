@@ -23,6 +23,21 @@
   filesystem without ADS support isn't fatal either. Not yet
   re-verified against real Excel -- please re-run `install.cmd` and
   confirm.
+- Confirmed live that MOTW/Protected View was not the (or not the only)
+  cause of the Excel template build failure above: unblocking the source
+  files made no difference and the identical error persisted. Audited
+  `excel/MediaCatalog_template.xlsx`'s internal XML (shared strings,
+  styles/dxf counts, content types, relationships, row spans) for
+  corruption from the earlier Inventory Number column-insertion surgery
+  -- all internally consistent, so that's very likely not the cause
+  either. `scripts/build_excel_template.vbs` opened the workbook
+  immediately after `CreateObject("Excel.Application")` with no pause for
+  Excel's COM server to finish initializing, which is the most commonly
+  reported real-world cause of this exact generic error when the file and
+  trust settings are otherwise fine. Added a one-second settle delay plus
+  a 3-attempt retry (1.5s apart) around `Workbooks.Open`, and the error
+  message now includes `Err.Number` for further diagnosis if it still
+  fails. Not yet verified against real Excel.
 - Added `install.cmd`/`install_media_catalog.py --skip-database`, to
   reconfigure `settings.ini` or rebuild a template without touching
   `data/imdb.sqlite` at all. The already-existing "don't redownload/rebuild
