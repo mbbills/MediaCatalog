@@ -18,14 +18,33 @@ if ($ExcelProcesses.Count -gt 0) {
 # Workbooks.Open, with no mention of Protected View at all. Unblocking
 # these files first (removing that flag) is harmless when it isn't the
 # cause and fixes it when it is.
+$UnblockFileCommand = Get-Command Unblock-File -ErrorAction SilentlyContinue
 $FilesToUnblock = @(
     (Join-Path $ProjectRoot "excel\MediaCatalog_template.xlsx"),
     (Join-Path $ProjectRoot "excel\MediaCatalog_Excel_Module.bas"),
     (Join-Path $ProjectRoot "excel\ThisWorkbook_Code.txt")
 )
 foreach ($FileToUnblock in $FilesToUnblock) {
-    if (Test-Path $FileToUnblock) {
-        Unblock-File -Path $FileToUnblock -ErrorAction SilentlyContinue
+    if (-not (Test-Path $FileToUnblock)) {
+        continue
+    }
+    try {
+        if ($UnblockFileCommand) {
+            # Present on PowerShell 3.0+.
+            Unblock-File -Path $FileToUnblock -ErrorAction Stop
+        }
+        else {
+            # PowerShell 2.0 (e.g. stock Windows 7) has no Unblock-File
+            # cmdlet; remove the Zone.Identifier alternate data stream
+            # directly instead. This is a no-op, not an error, when the
+            # stream isn't present.
+            Remove-Item -Path "$FileToUnblock`:Zone.Identifier" -ErrorAction Stop
+        }
+    }
+    catch {
+        # Nothing to unblock, or this filesystem/PowerShell combination
+        # doesn't support alternate data streams at all -- either way,
+        # not fatal to the build.
     }
 }
 

@@ -11,9 +11,18 @@
   instead of prompting. Files can pick up that Mark-of-the-Web flag when
   the repository is obtained as a downloaded/extracted ZIP rather than a
   plain `git clone`. The script now runs `Unblock-File` on the Excel
-  source files it touches before invoking the VBScript builder.
-  Reasoned from the documented error class and code review; not
-  verified against real Excel -- please re-run `install.cmd` and confirm.
+  source files it touches before invoking the VBScript builder. Confirmed
+  live that `Unblock-File` itself is unavailable on the user's Windows 7
+  install (PowerShell 2.0 predates that cmdlet), and that
+  `$ErrorActionPreference = "Stop"` turned the resulting
+  `CommandNotFoundException` into a hard failure despite
+  `-ErrorAction SilentlyContinue` (it can't apply to a command that was
+  never resolved). Now detects whether `Unblock-File` exists and falls
+  back to removing the `Zone.Identifier` alternate data stream directly
+  when it doesn't, wrapped in try/catch so a missing stream or a
+  filesystem without ADS support isn't fatal either. Not yet
+  re-verified against real Excel -- please re-run `install.cmd` and
+  confirm.
 - Added `install.cmd`/`install_media_catalog.py --skip-database`, to
   reconfigure `settings.ini` or rebuild a template without touching
   `data/imdb.sqlite` at all. The already-existing "don't redownload/rebuild
