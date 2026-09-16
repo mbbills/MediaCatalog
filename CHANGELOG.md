@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Added two more missing packaging phrases to `imdb_matcher`'s
+  packaging-word list, found in a third batch of failing titles: "Full
+  Screen"/"Wide Screen" as space-separated two-word forms (only the
+  single-word "fullscreen"/"widescreen" was previously recognized), and
+  "Snap case" as a physical case-type descriptor (same category as the
+  earlier DigiBook/DigiPack/SteelBook additions). Fixes `"Jarhead DVD
+  (Full Screen) (2005)"`, `"National Lampoon's Vacation DVD (Snap case)
+  (1983)"`, and `"National Lampoon's European Vacation DVD (Snap case)
+  (1985)"`. Extended `tests/test_title_cleanup.py` (17 cases total).
+
 - Fixed two more real-title cleanup gaps found in a second batch of
   failing Blu-ray.com titles:
   - `detect_season()` required a season ordinal to be immediately

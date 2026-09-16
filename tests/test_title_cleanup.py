@@ -73,6 +73,21 @@ CLEAN_CASES = [
         "Young Catherine",
         1991,
     ),
+    (
+        "Jarhead DVD (Full Screen) (2005)",
+        "Jarhead",
+        2005,
+    ),
+    (
+        "National Lampoon's Vacation DVD (Snap case) (1983)",
+        "National Lampoon's Vacation",
+        1983,
+    ),
+    (
+        "National Lampoon's European Vacation DVD (Snap case) (1985)",
+        "National Lampoon's European Vacation",
+        1985,
+    ),
 ]
 
 # (raw release title, expected series title, expected season number)
