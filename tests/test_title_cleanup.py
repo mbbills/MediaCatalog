@@ -94,6 +94,11 @@ CLEAN_CASES = [
         "National Lampoon's European Vacation",
         1985,
     ),
+    (
+        "16 Blocks (DVD  2006  Widescreen) NEW",
+        "16 Blocks",
+        2006,
+    ),
 ]
 
 # (raw release title, expected series title, expected season number)
@@ -177,6 +182,19 @@ def check_trailing_part_number_is_a_fallback_only():
     )
 
 
+def check_condition_tag_strip_is_case_sensitive():
+    """
+    A trailing "NEW" condition tag from a marketplace listing must be
+    stripped only when shouted in caps -- a real title that legitimately
+    ends the same way ("Something New") must survive untouched.
+    """
+    stripped = clean_release_name("16 Blocks (DVD 2006 Widescreen) NEW")
+    assert stripped == "16 Blocks", stripped
+
+    untouched = clean_release_name("Something New (2006)")
+    assert untouched == "Something New", untouched
+
+
 def check_multi_title_bonus_disc_is_left_unmatched():
     """
     A disc that covers more than one film has no single correct IMDb
@@ -194,6 +212,7 @@ def main():
     check_season_cases()
     check_packaging_word_uses_whole_word_matching()
     check_trailing_part_number_is_a_fallback_only()
+    check_condition_tag_strip_is_case_sensitive()
     check_multi_title_bonus_disc_is_left_unmatched()
     total = len(CLEAN_CASES) + len(SEASON_CASES)
     print(f"PASS: {total} title-cleanup regression cases")

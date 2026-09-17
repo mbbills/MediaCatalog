@@ -74,10 +74,15 @@ def extract_year(text):
     Extract a year hint when a release title includes one in parentheses or
     brackets, such as "(2009)" or "[2004]". A box-set year range such as
     "(2008-2013)" also counts; the first year of the range is used as the
-    hint.
+    hint. The year doesn't need to be the group's only content -- e.g.
+    "(DVD 2006 Widescreen)" still yields 2006 -- but it must be inside some
+    bracket group, since a bare year outside brackets is too easily part of
+    a real title ("300", "1984", "2001: A Space Odyssey") to search for
+    freely.
     """
     match = re.search(
-        r"[\[(](19\d{2}|20\d{2})(?:\s*[-–]\s*(?:19|20)\d{2})?[\])]",
+        r"[\[(][^\[\]()]*?\b(19\d{2}|20\d{2})\b"
+        r"(?:\s*[-–]\s*(?:19|20)\d{2})?[^\[\]()]*?[\])]",
         text,
     )
 
@@ -207,6 +212,22 @@ def clean_release_name(text):
     )
     while True:
         stripped = trailing_format_pattern.sub("", cleaned)
+        if stripped == cleaned:
+            break
+        cleaned = stripped
+
+    # A bare, ALL-CAPS condition/listing tag at the very end (e.g.
+    # "16 Blocks (DVD 2006 Widescreen) NEW") is seller/marketplace
+    # metadata, not title text. Matched case-SENSITIVELY on purpose: a
+    # legitimately title-cased title ending the same way ("Something New")
+    # must not be stripped -- only the shouted-caps marketplace convention
+    # is treated as clutter here.
+    trailing_condition_words = ("NEW",)
+    trailing_condition_pattern = re.compile(
+        r"\s+(?:" + "|".join(re.escape(word) for word in trailing_condition_words) + r")\s*$",
+    )
+    while True:
+        stripped = trailing_condition_pattern.sub("", cleaned)
         if stripped == cleaned:
             break
         cleaned = stripped

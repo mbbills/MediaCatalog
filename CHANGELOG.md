@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- Fixed two more gaps found in `"16 Blocks (DVD  2006  Widescreen) NEW"`:
+  - `extract_year()` only recognized a year that was the sole content of a
+    bracket group (e.g. `"(2006)"`); a year embedded alongside other words
+    in the same group (`"(DVD 2006 Widescreen)"`) was missed entirely.
+    Broadened to find a year token anywhere inside a bracket group, while
+    still requiring it be inside *some* bracket group -- a bare year
+    outside brackets is too easily part of a real title ("300", "1984",
+    "2001: A Space Odyssey") to search for freely.
+  - A trailing, ALL-CAPS condition/listing tag ("NEW") is seller
+    metadata, not title text, and wasn't stripped. Added as a
+    case-**sensitive** strip specifically so it can never touch a
+    legitimately title-cased title that happens to end the same way --
+    confirmed `"Something New (2006)"` is untouched while `"16 Blocks
+    (DVD 2006 Widescreen) NEW"` correctly loses the trailing tag.
+    Deliberately conservative: only "NEW" is added for now, since that's
+    the only condition tag seen in a real title so far; more (USED,
+    SEALED, MINT, etc.) can be added the same way if/when they show up in
+    a real failing title.
+  - Extended `tests/test_title_cleanup.py` (18 cases total), including an
+    explicit case-sensitivity regression guard.
+
 - Added a "- Part N" fallback candidate to `title_match_candidates()` for
   titles like `"Dragons: Riders of Berk - Part 1"`, where "Part N" marks
   how a season was split across discs/volumes rather than being part of
