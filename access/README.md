@@ -117,7 +117,7 @@ from an untrusted location:
 ## Field types
 
 - **Identifier-like fields are `TEXT`, never numeric**: `Inventory Number`,
-  `UPC`, `Blu-ray com URL`, `IMDb URL`, `IMDb ID`. This project has already
+  `UPC`, `Blu-ray URL`, `IMDb URL`, `IMDb ID`. This project has already
   been bitten twice by numeric-string bugs in Excel and LibreOffice Calc
   (leading zeros silently dropped from UPCs; a movie literally titled
   "1917" turning into a number) -- see `CHANGELOG.md`. Access doesn't have
@@ -143,45 +143,38 @@ from an untrusted location:
 
 ## Access field names vs. spreadsheet header names
 
-Table creation failed on the first real run: `Blu-ray.com URL` is not a
-valid Access field name (Access field names cannot contain a period).
-Checked every field name in `schema.sql` against Access's actual naming
-restrictions -- no period, `!`, `` ` ``, `[`, or `]`, and no leading space
--- rather than assuming this was the only one; `Blu-ray.com Title` has the
-same problem and was the only other one that did. Every other field name
-in this schema was already Access-safe and identical to its spreadsheet
-header text.
+**No longer applicable -- history kept below for context.** Every Access
+field name is now identical to its canonical spreadsheet header text; no
+mapping table is needed anywhere in this project.
 
-Both were renamed by replacing the period with a space, matching the
-convention already used for every other multi-word field name in this
-schema (`Content Rating`, `Physical Release Date`, etc.), so the Access
-field name differs from the canonical spreadsheet header for exactly
-these two fields:
+Table creation originally failed on the first real run: `Blu-ray.com URL`
+is not a valid Access field name (Access field names cannot contain a
+period). Checked every field name in `schema.sql` against Access's actual
+naming restrictions -- no period, `!`, `` ` ``, `[`, or `]`, and no
+leading space -- rather than assuming this was the only one; `Blu-ray.com
+Title` had the same problem and was the only other one that did. The
+original fix renamed just the two Access field names (to `Blu-ray com
+URL`/`Blu-ray com Title`, period dropped and replaced with a space) while
+keeping the spreadsheet headers as `Blu-ray.com URL`/`Blu-ray.com Title`,
+which meant `build_access_database.vbs` needed two parallel arrays
+(`accessFieldNames` for `ControlSource` binding, `displayLabels` for the
+prettier header text with the period) and Phase 2/3's resolver code had to
+know about the mismatch.
 
-| Access field name | Canonical spreadsheet header (Excel/Calc) |
-|---|---|
-| `Blu-ray com URL` | `Blu-ray.com URL` |
-| `Blu-ray com Title` | `Blu-ray.com Title` |
-| *(every other field)* | identical in both |
+That mismatch is now gone: the canonical spreadsheet headers were renamed
+from `Blu-ray.com URL`/`Blu-ray.com Title` to `Blu-ray URL`/`Blu-ray
+Title` (dropping ".com" entirely, rather than just the period) for
+consistency with `Blu-ray Year`/`Blu-ray Runtime`, which never had ".com"
+in the first place -- and that rename incidentally also makes them valid
+Access field names verbatim. `schema.sql`, `build_access_database.vbs`,
+and every field reference in `MediaCatalog_Access_Module.bas` now use the
+exact same text as the spreadsheet header, for every field, with no
+exceptions.
 
-**This affects more than just `schema.sql`.** `build_access_database.vbs`
-independently hardcodes its own copy of the field list to build the
-browse form (it does not parse `schema.sql`), and had the same "Blu-ray.
-com URL"/"Blu-ray.com Title" strings baked into it -- used both to bind
-each textbox's `ControlSource` (which must match the real Access field
-name) and to caption each label (which can display anything, including
-the period). Fixed by splitting that single list into two parallel
-arrays: `accessFieldNames` (must track `schema.sql` exactly) for
-`ControlSource`, and `displayLabels` (the original, prettier spreadsheet
-header text, period included) for each label's `Caption`. Phase 2, which
-wires up the resolver against this table, needs to use `accessFieldNames`
--- i.e. the table's real column names -- not the spreadsheet header text,
-for exactly these two fields.
-
-**Safeguard added**: `tests/test_access_schema_names.py` parses
+**Safeguard remains in place**: `tests/test_access_schema_names.py` parses
 `schema.sql`'s field list and asserts none of them contain a period, `!`,
-`` ` ``, `[`, `]`, or a leading space, so a third occurrence of this
-mistake (in a future schema edit) is caught by the existing test suite
+`` ` ``, `[`, `]`, or a leading space, so a future schema edit that
+reintroduces an Access-illegal character is caught by the test suite
 instead of by another live Access run. It does not (and cannot, without a
 real Access install) validate anything beyond Access's field-naming
 character restrictions -- reserved-word collisions and the 64-character
@@ -191,14 +184,13 @@ name-length limit are not checked.
 
 `frmMediaCatalog` is a single, plain Detail-section form (no header/footer
 sections used), one label+text-box pair per field, stacked vertically in
-the same order as the table: Inventory Number, UPC, Blu-ray.com URL,
-Blu-ray.com Title, IMDb URL, IMDb ID, IMDb Title, Year, Runtime, Title
+the same order as the table: Inventory Number, UPC, Blu-ray URL,
+Blu-ray Title, IMDb URL, IMDb ID, IMDb Title, Year, Runtime, Title
 Type, Season, Status / Error, Studio, Blu-ray Year, Blu-ray Runtime,
 Content Rating, Physical Release Date, Disc Format, Video Codec,
 Resolution, Aspect Ratio, Disc Count / Capacities (the labels show the
-original spreadsheet header text, period included, even where the
-underlying Access field name differs -- see "Access field names vs.
-spreadsheet header names" above). Below the last field is a **"Resolve
+same text as the underlying Access field name -- see "Access field names
+vs. spreadsheet header names" above). Below the last field is a **"Resolve
 Current Record"** button (Phase 2). Each field's label is its own
 explicitly-created and positioned control (Access's auto-attached-label
 behavior turned out not to be usable here -- see "Verified vs. not
@@ -220,7 +212,7 @@ currently open on the form:
 
 1. Saves the current record if it has unsaved edits (`Me.Dirty = False`),
    so the fields read below reflect what's actually in the record.
-2. Reads `UPC`, `Blu-ray com URL`, `Blu-ray com Title`, `IMDb URL`,
+2. Reads `UPC`, `Blu-ray URL`, `Blu-ray Title`, `IMDb URL`,
    `IMDb ID`, `IMDb Title`, and `Season` from the current record. If all
    of those (except Season) are blank, it says so and stops -- there's
    nothing to resolve from.
@@ -232,7 +224,7 @@ currently open on the form:
 4. Launches the configured Python interpreter against `resolve_rows.py`
    and waits for it to finish, then reads back its one-row TSV response.
 5. Writes the returned fields into the current record and re-saves it:
-   - Blu-ray release identity (`Blu-ray com URL`, `Blu-ray com Title`)
+   - Blu-ray release identity (`Blu-ray URL`, `Blu-ray Title`)
      and IMDb work identity (`IMDb URL`, `IMDb ID`, `IMDb Title`, `Year`,
      `Runtime`, `Title Type`, `Season`) are always overwritten when the
      resolver returns a value, matching Excel/Calc.
@@ -484,7 +476,7 @@ Verified in this environment:
   reference uses `frm.Controls("Field Name")` (plain string-indexed
   collection access) rather than bang-bracket syntax
   (`frm![Field Name]`), specifically to avoid any doubt about how VBA
-  parses the hyphens/slashes/spaces in names like `Blu-ray com URL` or
+  parses the hyphens/slashes/spaces in names like `Blu-ray URL` or
   `Status / Error` -- given this project's history, bang-bracket syntax
   was judged not worth the risk even though it's probably fine.
 - The Shell/poll pattern, `settings.ini` parsing, and windowless-Python
@@ -529,8 +521,8 @@ that first Phase 2 release is now verified.
 5. **What success looks like**: after a short pause (a live Blu-ray.com
    lookup, so likely several seconds, with no progress indicator -- see
    "Known limitations" above), a message box reports something like
-   `Resolved: OK - Blu-ray + IMDb`, and the record's `Blu-ray com URL`,
-   `Blu-ray com Title`, `IMDb URL`, `IMDb ID`, `IMDb Title`, `Year`,
+   `Resolved: OK - Blu-ray + IMDb`, and the record's `Blu-ray URL`,
+   `Blu-ray Title`, `IMDb URL`, `IMDb ID`, `IMDb Title`, `Year`,
    `Runtime`, `Title Type`, `Studio`, and other enrichment fields are now
    filled in, with `Status / Error` showing the same status text as the
    message box.

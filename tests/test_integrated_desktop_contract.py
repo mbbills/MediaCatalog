@@ -21,12 +21,12 @@ def main():
     assert "Set ActiveCatalogSheet = ActiveSheet" in excel
     assert 'Replace$(control.Caption, "&", "") = MENU_CAPTION' in excel
     assert '"resolve_rows.py"' in excel
-    assert 'Array("Blu-ray.com Title", "Release Title"' in excel
+    assert 'Array("Blu-ray Title", "Blu-ray.com Title", "Release Title"' in excel
     assert 'Array("IMDb Title", "Title")' in excel
     assert "' MediaCatalog LibreOffice Calc module v0.4.1" in calc
     assert "Sub ResolveSelectedRows()" in calc
     assert '"resolve_rows.py"' in calc
-    assert 'Array("Blu-ray.com Title", "Release Title"' in calc
+    assert 'Array("Blu-ray Title", "Blu-ray.com Title", "Release Title"' in calc
     assert 'Array("IMDb Title", "Title")' in calc
     assert "Sub RemoveSelectedUPCERows()" in calc
     assert "Sub OpenSelectedUPCOnBluRay()" in calc

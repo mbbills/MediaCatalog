@@ -21,8 +21,8 @@ identity:
 |---|---|
 | A | Inventory Number |
 | B | UPC |
-| C | Blu-ray.com URL |
-| D | Blu-ray.com Title |
+| C | Blu-ray URL |
+| D | Blu-ray Title |
 | E | IMDb URL |
 | F | IMDb ID |
 | G | IMDb Title |
@@ -179,11 +179,11 @@ The resolver processes each row according to the strongest available input:
 | Starting information | Result |
 |---|---|
 | UPC only | UPC → Blu-ray.com release → disc details and structured IMDb link → local IMDb metadata |
-| Blu-ray.com URL only | Exact release page → disc details and structured IMDb link → local IMDb metadata |
+| Blu-ray URL only | Exact release page → disc details and structured IMDb link → local IMDb metadata |
 | IMDb ID or URL only | Exact local IMDb lookup |
 | IMDb Title only | Local IMDb title matcher; physical-release fields remain unresolved |
 | UPC plus IMDb ID | UPC supplies physical-release data; the entered IMDb ID supplies canonical content data |
-| Blu-ray.com URL plus UPC | The supplied release URL is authoritative |
+| Blu-ray URL plus UPC | The supplied release URL is authoritative |
 
 Identifier precedence is:
 

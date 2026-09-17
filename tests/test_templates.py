@@ -35,7 +35,7 @@ def main():
         menu = package.read(
             "Configurations2/menubar/menubar.xml"
         ).decode("utf-8")
-        assert b">Blu-ray.com Title<" in content
+        assert b">Blu-ray Title<" in content
         assert b">IMDb Title<" in content
         assert b">Release Title<" not in content
         assert b">Title<" not in content
@@ -46,7 +46,7 @@ def main():
         ).read_text(encoding="utf-8")
         assert embedded_source == standalone_source
         assert "Sub ResolveSelectedRows()" in macro
-        assert 'Array("Blu-ray.com Title", "Release Title"' in macro
+        assert 'Array("Blu-ray Title", "Blu-ray.com Title", "Release Title"' in macro
         assert 'Array("IMDb Title", "Title")' in macro
         assert "Media Catalog" in menu
         assert "ResolveSelectedRows?language=Basic" in menu
@@ -69,7 +69,7 @@ def main():
             for name in package.namelist()
             if name.startswith("xl/") and name.endswith(".xml")
         )
-        assert b"Blu-ray.com Title" in worksheet_xml
+        assert b"Blu-ray Title" in worksheet_xml
         assert b"IMDb Title" in worksheet_xml
         assert b"Release Title" not in worksheet_xml
 

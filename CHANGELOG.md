@@ -2,6 +2,57 @@
 
 ## Unreleased
 
+- **Renamed "Blu-ray.com URL"/"Blu-ray.com Title" to "Blu-ray URL"/"Blu-ray
+  Title" everywhere** (dropping ".com" entirely, not just the period), for
+  consistency with "Blu-ray Year"/"Blu-ray Runtime" (which never had
+  ".com") and so the Access field names -- previously "Blu-ray com
+  URL"/"Blu-ray com Title", a workaround for Access's no-period rule --
+  can become character-for-character identical to the canonical
+  spreadsheet header text, with no separate name mapping needed anywhere
+  in the project. Updated in sync:
+  - `excel/MediaCatalog_template.xlsx` and `MediaCatalog_template.ods`
+    header rows (B1/C1 -> C1/D1 shifted from the earlier Inventory Number
+    insertion, text only changed here, no columns move), `excel/
+    HEADERS.txt`, `calc/HEADERS.txt`.
+  - `excel/MediaCatalog_Excel_Module.bas` and `calc/
+    MediaCatalog_Calc_Module.txt`: every `FindHeaderColumn`/
+    `FindCalcHeaderColumn` alias array now leads with the new canonical
+    name, with `"Blu-ray.com URL"`/`"Blu-ray.com Title"` kept as a legacy
+    alias (same pattern as the existing `"Release Title"`/`"DVD Title"`
+    aliases) so spreadsheets built before this change keep working
+    unmodified. Guard/error messages, diagnostic labels, and the
+    top-of-file column comment updated to match.
+  - `access/schema.sql`: `[Blu-ray com URL]`/`[Blu-ray com Title]` ->
+    `[Blu-ray URL]`/`[Blu-ray Title]`.
+  - `access/build_access_database.vbs`: `accessFieldNames`/
+    `displayLabels` both updated (and are now literally identical arrays
+    for every field, not just these two).
+  - `access/MediaCatalog_Access_Module.bas`: every `Controls(...)`/
+    `Fields(...)` reference in both `ResolveCurrentRecord` (Phase 2) and
+    `ResolveSelectedRecords` (Phase 3) updated -- these would otherwise
+    have broken silently (a field-name lookup miss, not a compile error)
+    after the schema rename.
+  - `access/README.md`'s field-name mapping table rewritten as a
+    historical note: it no longer applies, since every Access field name
+    now matches its spreadsheet header exactly.
+  - Root `README.md`'s column table and the two scenario-table rows that
+    named the column.
+  - Regenerated the checked-in `.xlsx`/`.ods` templates' header cells
+    directly (raw XML/zip surgery, not a rebuild) and re-embedded the
+    updated Calc module source into the `.ods`'s Basic macro storage,
+    verified byte-identical to the standalone `.txt` file.
+  - Updated every test asserting the old exact strings:
+    `tests/test_desktop_detail_contract.py`,
+    `tests/test_integrated_desktop_contract.py`,
+    `tests/test_templates.py`, `tests/test_access_schema_names.py`.
+  - Scanned `schema.sql`, `HEADERS.txt`, and both live template header
+    rows for any other Access-illegal character (period, `!`, `` ` ``,
+    `[`, `]`) -- found none; this was the only occurrence.
+  - `resolve_rows.py`'s "Manual Blu-ray.com URL" source-attribution label
+    and every "Blu-ray.com" mention describing the actual website (menu
+    items, comments, status text) were deliberately left unchanged --
+    only the spreadsheet-header/Access-field-name usage was in scope.
+
 - Fixed two more gaps found in `"16 Blocks (DVD  2006  Widescreen) NEW"`:
   - `extract_year()` only recognized a year that was the sole content of a
     bracket group (e.g. `"(2006)"`); a year embedded alongside other words

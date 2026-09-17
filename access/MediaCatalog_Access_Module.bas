@@ -12,11 +12,13 @@ Option Explicit
 ' RunCommandAndWait/GetPythonCommand/GetWindowlessPythonCommand verbatim,
 ' since Access shares Excel's VBA dialect -- not reinvented here.
 '
-' Access field names differ from the canonical spreadsheet headers for two
-' fields (Access field names cannot contain a period): "Blu-ray.com URL"
-' is the Access field "Blu-ray com URL", and "Blu-ray.com Title" is
-' "Blu-ray com Title". See the mapping table in access/README.md. Every
-' other Access field name is identical to its spreadsheet header.
+' Every Access field name here is identical to its canonical spreadsheet
+' header text. (Two of them -- "Blu-ray URL" and "Blu-ray Title" -- were
+' originally "Blu-ray.com URL"/"Blu-ray.com Title" on the spreadsheet side,
+' which are invalid Access field names because of the period; the
+' spreadsheet headers were renamed to drop ".com" entirely rather than
+' keep a separate Access-only field name, so no name mapping is needed
+' anywhere in this project any more.)
 '
 ' Only "Resolve Selected Rows" is implemented here (as "Resolve Current
 ' Record" -- Access has no spreadsheet-style multi-row selection, so this
@@ -359,7 +361,7 @@ Public Function ResolveCurrentRecord() As Variant
     Set frm = Screen.ActiveForm
 
     If frm.NewRecord Then
-        MsgBox "Enter and save some data (a UPC, a Blu-ray.com URL, or an IMDb ID) before resolving.", _
+        MsgBox "Enter and save some data (a UPC, a Blu-ray URL, or an IMDb ID) before resolving.", _
                vbInformation, "MediaCatalog"
         Exit Function
     End If
@@ -372,13 +374,13 @@ Public Function ResolveCurrentRecord() As Variant
     ' Controls are referenced by name string (frm.Controls("Field Name"))
     ' rather than bang-bracket syntax (frm![Field Name]) throughout this
     ' function, to sidestep any doubt about how the VBA parser treats the
-    ' hyphens/slashes/spaces in field names like "Blu-ray com URL" or
+    ' hyphens/slashes/spaces in field names like "Blu-ray URL" or
     ' "Status / Error" -- this project has already been burned twice by
     ' automation-syntax assumptions that seemed safe but weren't (see
     ' access/README.md's "Verified vs. not verified" history).
     upc = Trim$(Nz(frm.Controls("UPC").Value, ""))
-    blurayUrl = Trim$(Nz(frm.Controls("Blu-ray com URL").Value, ""))
-    releaseTitle = Trim$(Nz(frm.Controls("Blu-ray com Title").Value, ""))
+    blurayUrl = Trim$(Nz(frm.Controls("Blu-ray URL").Value, ""))
+    releaseTitle = Trim$(Nz(frm.Controls("Blu-ray Title").Value, ""))
     imdbUrl = Trim$(Nz(frm.Controls("IMDb URL").Value, ""))
     imdbId = Trim$(Nz(frm.Controls("IMDb ID").Value, ""))
     canonicalTitle = Trim$(Nz(frm.Controls("IMDb Title").Value, ""))
@@ -389,7 +391,7 @@ Public Function ResolveCurrentRecord() As Variant
     End If
 
     If Len(upc & blurayUrl & releaseTitle & imdbUrl & imdbId & canonicalTitle) = 0 Then
-        MsgBox "This record has no UPC, Blu-ray.com URL, Blu-ray.com Title, IMDb URL, IMDb ID, or IMDb Title to resolve from.", _
+        MsgBox "This record has no UPC, Blu-ray URL, Blu-ray Title, IMDb URL, IMDb ID, or IMDb Title to resolve from.", _
                vbInformation, "MediaCatalog"
         Exit Function
     End If
@@ -473,8 +475,8 @@ Public Function ResolveCurrentRecord() As Variant
     ' 17 release_date, 18 disc_format, 19 video_codec, 20 resolution,
     ' 21 aspect_ratio, 22 disc_count_capacities, 23 source, 24 warning.
 
-    If Len(fields(4)) > 0 Then WriteTextValue frm, "Blu-ray com URL", CStr(fields(4))
-    If Len(fields(5)) > 0 Then WriteTextValue frm, "Blu-ray com Title", CStr(fields(5))
+    If Len(fields(4)) > 0 Then WriteTextValue frm, "Blu-ray URL", CStr(fields(4))
+    If Len(fields(5)) > 0 Then WriteTextValue frm, "Blu-ray Title", CStr(fields(5))
 
     If Len(fields(7)) > 0 Then
         WriteTextValue frm, "IMDb URL", CStr(fields(6))
@@ -642,8 +644,8 @@ Public Sub ResolveSelectedRecords()
         rowId = rsSource.Fields("ID").Value
 
         upc = Trim$(Nz(rsSource.Fields("UPC").Value, ""))
-        blurayUrl = Trim$(Nz(rsSource.Fields("Blu-ray com URL").Value, ""))
-        releaseTitle = Trim$(Nz(rsSource.Fields("Blu-ray com Title").Value, ""))
+        blurayUrl = Trim$(Nz(rsSource.Fields("Blu-ray URL").Value, ""))
+        releaseTitle = Trim$(Nz(rsSource.Fields("Blu-ray Title").Value, ""))
         imdbUrl = Trim$(Nz(rsSource.Fields("IMDb URL").Value, ""))
         imdbId = Trim$(Nz(rsSource.Fields("IMDb ID").Value, ""))
         canonicalTitle = Trim$(Nz(rsSource.Fields("IMDb Title").Value, ""))
@@ -720,8 +722,8 @@ Public Sub ResolveSelectedRecords()
                     ' Field indices match resolve_rows.py's OUTPUT_FIELDS
                     ' exactly -- see ResolveCurrentRecord's own comment
                     ' for the full list.
-                    If Len(fields(4)) > 0 Then rsTable.Fields("Blu-ray com URL").Value = fields(4)
-                    If Len(fields(5)) > 0 Then rsTable.Fields("Blu-ray com Title").Value = fields(5)
+                    If Len(fields(4)) > 0 Then rsTable.Fields("Blu-ray URL").Value = fields(4)
+                    If Len(fields(5)) > 0 Then rsTable.Fields("Blu-ray Title").Value = fields(5)
 
                     If Len(fields(7)) > 0 Then
                         rsTable.Fields("IMDb URL").Value = fields(6)

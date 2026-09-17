@@ -73,8 +73,8 @@ def main():
     )
     assert "ID" in names
     assert "Inventory Number" in names
-    assert "Blu-ray com URL" in names
-    assert "Blu-ray com Title" in names
+    assert "Blu-ray URL" in names
+    assert "Blu-ray Title" in names
 
     failures = []
     for name in names:

@@ -15,7 +15,7 @@ calc = (ROOT / "calc" / "MediaCatalog_Calc_Module.txt").read_text(
 assert calc.splitlines()[2] == "' MediaCatalog LibreOffice Calc module v0.4.1"
 
 headers = (
-    "Inventory Number\tUPC\tBlu-ray.com URL\tBlu-ray.com Title\tIMDb URL\tIMDb ID\tIMDb Title\t"
+    "Inventory Number\tUPC\tBlu-ray URL\tBlu-ray Title\tIMDb URL\tIMDb ID\tIMDb Title\t"
     "Year\tRuntime\tTitle Type\tSeason\tStatus / Error\tStudio\tBlu-ray Year\t"
     "Blu-ray Runtime\tContent Rating\tPhysical Release Date\tDisc Format\t"
     "Video Codec\tResolution\tAspect Ratio\tDisc Count / Capacities"
@@ -43,7 +43,7 @@ assert '"bluray_details.py"' in excel
 assert "GetWindowlessPythonCommand" in excel
 assert "WriteIsoDateIfBlank" in excel
 assert "WriteTextIfBlank sheet.Cells(resultRow, blurayYearColumn), fields(7)" in excel
-assert 'FindHeaderColumn(sheet, Array("Blu-ray.com URL", "Blu-ray URL", "Release URL"))' in excel
+assert 'FindHeaderColumn(sheet, Array("Blu-ray URL", "Blu-ray.com URL", "Release URL"))' in excel
 assert 'fields(4) = "No UPC/EAN, URL OK"' in excel
 assert 'Case "CANCELLED"' in excel
 assert '"Cancelled: " & CStr(cancelled)' in excel
@@ -67,7 +67,7 @@ assert '"bluray_details.py"' in calc
 assert "SetCalcCellHyperlink" in calc
 assert "SetCalcIsoDateIfBlank" in calc
 assert "SetCalcTextIfBlank oSheet.getCellByPosition(blurayYearColumn, rowNum), fields(7)" in calc
-assert 'FindCalcHeaderColumn(oSheet, Array("Blu-ray.com URL", "Blu-ray URL", "Release URL"))' in calc
+assert 'FindCalcHeaderColumn(oSheet, Array("Blu-ray URL", "Blu-ray.com URL", "Release URL"))' in calc
 assert 'fields(4) = "No UPC/EAN, URL OK"' in calc
 assert 'Case "CANCELLED"' in calc
 assert '"Cancelled: " & CStr(cancelled)' in calc

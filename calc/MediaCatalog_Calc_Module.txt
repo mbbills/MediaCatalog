@@ -4,8 +4,8 @@ Option Explicit
 '
 ' Columns:
 '   A  UPC
-'   B  Blu-ray.com URL
-'   C  Blu-ray.com Title
+'   B  Blu-ray URL
+'   C  Blu-ray Title
 '   D  IMDb URL
 '   E  IMDb ID
 '   F  IMDb Title
@@ -315,8 +315,8 @@ Sub ResolveSelectedRows()
 
     Set oSheet = oSelection.Spreadsheet
     upcColumn = FindCalcHeaderColumn(oSheet, Array("UPC", "UPC Code", "Barcode"))
-    blurayUrlColumn = FindCalcHeaderColumn(oSheet, Array("Blu-ray.com URL", "Blu-ray URL", "Release URL"))
-    releaseTitleColumn = FindCalcHeaderColumn(oSheet, Array("Blu-ray.com Title", "Release Title", "DVD Title"))
+    blurayUrlColumn = FindCalcHeaderColumn(oSheet, Array("Blu-ray URL", "Blu-ray.com URL", "Release URL"))
+    releaseTitleColumn = FindCalcHeaderColumn(oSheet, Array("Blu-ray Title", "Blu-ray.com Title", "Release Title", "DVD Title"))
     imdbUrlColumn = FindCalcHeaderColumn(oSheet, Array("IMDb URL"))
     imdbIdColumn = FindCalcHeaderColumn(oSheet, Array("IMDb ID"))
     titleColumn = FindCalcHeaderColumn(oSheet, Array("IMDb Title", "Title"))
@@ -469,14 +469,14 @@ Sub ResolveSelectedRows()
                 lastWriteStage = "row " & CStr(i) & ": reading result fields"
 
                 If fields(4) <> "" Then
-                    lastWriteStage = "row " & CStr(i) & ": Blu-ray.com URL hyperlink"
+                    lastWriteStage = "row " & CStr(i) & ": Blu-ray URL hyperlink"
                     SetCalcCellHyperlink _
                         oSheet.getCellByPosition(blurayUrlColumn, i), _
                         fields(4), _
                         fields(4)
                 End If
                 If fields(5) <> "" Then
-                    lastWriteStage = "row " & CStr(i) & ": Blu-ray.com Title hyperlink"
+                    lastWriteStage = "row " & CStr(i) & ": Blu-ray Title hyperlink"
                     SetCalcCellHyperlink _
                         oSheet.getCellByPosition(releaseTitleColumn, i), _
                         fields(4), _
@@ -814,10 +814,10 @@ Sub ResolveSelectedUPCsByProvider( _
         oSheet, Array("UPC", "UPC Code", "Barcode") _
     )
     urlColumn = FindCalcHeaderColumn( _
-        oSheet, Array("Blu-ray.com URL", "Blu-ray URL", "Release URL") _
+        oSheet, Array("Blu-ray URL", "Blu-ray.com URL", "Release URL") _
     )
     titleColumn = FindCalcHeaderColumn( _
-        oSheet, Array("Blu-ray.com Title", "Release Title", "DVD Title", "UPCItemDB Name") _
+        oSheet, Array("Blu-ray Title", "Blu-ray.com Title", "Release Title", "DVD Title", "UPCItemDB Name") _
     )
     statusColumn = FindCalcHeaderColumn( _
         oSheet, Array("Status / Error", "Status", "Error") _
@@ -825,7 +825,7 @@ Sub ResolveSelectedUPCsByProvider( _
 
     If upcColumn < 0 Or titleColumn < 0 Or statusColumn < 0 Then
         MsgBox _
-            "The UPC, Blu-ray.com Title, and Status / Error columns are required.", _
+            "The UPC, Blu-ray Title, and Status / Error columns are required.", _
             16, _
             "MediaCatalog"
         Exit Sub
@@ -833,7 +833,7 @@ Sub ResolveSelectedUPCsByProvider( _
 
     If addHyperlink And urlColumn < 0 Then
         MsgBox _
-            "The Blu-ray.com URL column is required for BRdC lookup.", _
+            "The Blu-ray URL column is required for BRdC lookup.", _
             16, _
             "MediaCatalog"
         Exit Sub
@@ -1123,12 +1123,12 @@ Sub ResolveSelectedUPCsLegacy()
     Set oSheet = oSelection.Spreadsheet
     upcColumn = FindCalcHeaderColumn(oSheet, Array("UPC", "UPC Code", "Barcode"))
     titleColumn = FindCalcHeaderColumn( _
-        oSheet, Array("Blu-ray.com Title", "Release Title", "DVD Title", "UPCItemDB Name") _
+        oSheet, Array("Blu-ray Title", "Blu-ray.com Title", "Release Title", "DVD Title", "UPCItemDB Name") _
     )
 
     If upcColumn < 0 Or titleColumn < 0 Then
         MsgBox _
-            "The UPC and Blu-ray.com Title columns are required.", _
+            "The UPC and Blu-ray Title columns are required.", _
             16, _
             "MediaCatalog"
         Exit Sub
@@ -1564,7 +1564,7 @@ Sub EnrichSelectedBluRayDetails()
     If startRow < 1 Then startRow = 1
 
     upcColumn = FindCalcHeaderColumn(oSheet, Array("UPC", "UPC Code", "Barcode"))
-    urlColumn = FindCalcHeaderColumn(oSheet, Array("Blu-ray.com URL", "Blu-ray URL", "Release URL"))
+    urlColumn = FindCalcHeaderColumn(oSheet, Array("Blu-ray URL", "Blu-ray.com URL", "Release URL"))
     statusColumn = FindCalcHeaderColumn(oSheet, Array("Status / Error", "Status", "Error"))
     studioColumn = FindCalcHeaderColumn(oSheet, Array("Studio", "Blu-ray Studio"))
     blurayYearColumn = FindCalcHeaderColumn(oSheet, Array("Blu-ray Year", "Release Year"))
@@ -1799,7 +1799,7 @@ End Sub
 
 
 ' ============================================================================
-' Blu-ray.com Title / IMDb ID -> IMDb metadata
+' Blu-ray Title / IMDb ID -> IMDb metadata
 ' ============================================================================
 
 Function LookupIMDbRow( _
@@ -1843,7 +1843,7 @@ Function LookupIMDbRow( _
     LookupIMDbRow = "ERROR:Unknown IMDb lookup error"
 
     releaseTitleColumn = FindCalcHeaderColumn( _
-        oSheet, Array("Blu-ray.com Title", "Release Title", "DVD Title", "UPCItemDB Name") _
+        oSheet, Array("Blu-ray Title", "Blu-ray.com Title", "Release Title", "DVD Title", "UPCItemDB Name") _
     )
     imdbUrlColumn = FindCalcHeaderColumn(oSheet, Array("IMDb URL"))
     imdbIdColumn = FindCalcHeaderColumn(oSheet, Array("IMDb ID"))
@@ -2202,7 +2202,7 @@ Sub LookupIMDbForCurrentRow()
     summary = _
         "IMDb lookup finished." & Chr(10) & Chr(10) & _
         "Resolved/refreshed: " & CStr(resolvedCount) & Chr(10) & _
-        "Blank Blu-ray.com Title: " & CStr(blankCount) & Chr(10) & _
+        "Blank Blu-ray Title: " & CStr(blankCount) & Chr(10) & _
         "Needs review: " & CStr(failedCount)
 
     If failures <> "" Then

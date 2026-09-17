@@ -156,15 +156,17 @@ Sub BuildBrowseForm(app)
     Dim labelLeft, labelWidth, textLeft, textWidth
     Dim frm, ctl, lbl, finalName
 
-    ' Must exactly match schema.sql's field names (see the Access-name <->
-    ' spreadsheet-header mapping table in access/README.md), NOT the
-    ' spreadsheet header text: ControlSource below binds a control to a
-    ' field by its real Access name, and "Blu-ray.com URL"/"Blu-ray.com
-    ' Title" are invalid Access field names (Access field names cannot
-    ' contain a period). displayLabels carries the original, prettier
-    ' spreadsheet header text for what the user actually sees on the form.
+    ' Must exactly match schema.sql's field names, which are now identical
+    ' to the spreadsheet header text for every field (the canonical
+    ' headers were renamed from "Blu-ray.com URL"/"Blu-ray.com Title" to
+    ' "Blu-ray URL"/"Blu-ray Title" specifically so this would be true --
+    ' see schema.sql's own header comment). accessFieldNames and
+    ' displayLabels are therefore the same values everywhere now; kept as
+    ' two separate arrays (rather than collapsed to one) only because
+    ' ControlSource binding and the label caption are conceptually
+    ' different uses, even though nothing currently makes them differ.
     accessFieldNames = Array( _
-        "Inventory Number", "UPC", "Blu-ray com URL", "Blu-ray com Title", _
+        "Inventory Number", "UPC", "Blu-ray URL", "Blu-ray Title", _
         "IMDb URL", "IMDb ID", "IMDb Title", "Year", "Runtime", _
         "Title Type", "Season", "Status / Error", "Studio", _
         "Blu-ray Year", "Blu-ray Runtime", "Content Rating", _
@@ -172,7 +174,7 @@ Sub BuildBrowseForm(app)
         "Resolution", "Aspect Ratio", "Disc Count / Capacities" _
     )
     displayLabels = Array( _
-        "Inventory Number", "UPC", "Blu-ray.com URL", "Blu-ray.com Title", _
+        "Inventory Number", "UPC", "Blu-ray URL", "Blu-ray Title", _
         "IMDb URL", "IMDb ID", "IMDb Title", "Year", "Runtime", _
         "Title Type", "Season", "Status / Error", "Studio", _
         "Blu-ray Year", "Blu-ray Runtime", "Content Rating", _
